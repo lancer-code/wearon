@@ -13,9 +13,12 @@ This is a **Tamagui + Solito + Next.js + Expo monorepo** for building universal 
 - **Expo SDK 53**: Native iOS/Android application
 - **React 19**: Shared across platforms
 - **tRPC**: Type-safe API layer with end-to-end type safety
-- **Supabase**: Backend as a Service (auth, database, storage)
+- **Supabase**: Backend as a Service (auth, database, storage, realtime)
 - **Axios**: HTTP client for all API requests (preferred over fetch)
 - **React Query**: Data fetching and caching
+- **Sharp**: High-performance image processing (collage stitching)
+- **BullMQ + Redis**: Job queue with rate limiting (300 req/min)
+- **Grok API**: AI image generation (x.ai)
 - **Biome**: Linting and formatting
 - **Vitest**: Testing framework
 - **Yarn 4.5**: Package manager
@@ -40,6 +43,14 @@ yarn ios               # Run iOS app (Expo)
 yarn android           # Run Android app (Expo)
 yarn native:prebuild   # Generate native iOS/Android projects
 ```
+
+### Background Worker (Required for Image Generation)
+```bash
+cd packages/api
+yarn worker            # Start BullMQ worker for image generation jobs
+```
+
+The worker processes generation jobs from the queue, creates collages, calls Grok API, and updates session status via Supabase Realtime.
 
 ### Development Workflow
 ```bash
@@ -290,3 +301,109 @@ Axios is installed in both `apps/next` and `apps/expo` for consistent HTTP clien
 6. **API Calls**: **ALWAYS use axios** for HTTP requests, never use fetch
 7. **Authentication**: Access user via `useSupabase()` hook, check `user` and `session` state
 8. **Type Safety**: Use tRPC for type-safe API endpoints when needed, but prefer axios for REST calls
+
+## WearOn Virtual Try-On Implementation
+
+### Overview
+WearOn is a virtual try-on platform where users upload photos and select outfits to see AI-generated try-on results.
+
+### Architecture
+
+**Backend Services** (`packages/api/src/`):
+- **Image Processing** (`services/image-processor.ts`): Sharp-based collage stitcher that combines multiple images (model, outfit, accessories) into a single 2048x2048 image
+- **Queue System** (`services/queue.ts`): BullMQ + Redis job queue with 300 requests/minute rate limiting
+- **Grok API Client** (`services/grok.ts`): Integration with x.ai Grok image generation API
+- **Storage Cleanup** (`services/storage-cleanup.ts`): Automatically deletes files older than 6 hours for privacy
+- **Generation Worker** (`workers/generation.worker.ts`): Background processor that handles the full pipeline
+
+### Database Schema
+
+**Tables** (see `supabase/migrations/`):
+- `users`: Extended user profiles (gender, age)
+- `user_credits`: Credit balance tracking (10 free credits on signup)
+- `credit_transactions`: Audit trail for all credit operations
+- `generation_sessions`: Try-on history with status tracking
+- `analytics_events`: Platform usage metrics
+
+**Functions**:
+- `handle_new_user()`: Trigger that auto-creates profile + grants 10 credits
+- `deduct_credits()`: Atomic credit deduction with transaction logging
+- `refund_credits()`: Refund credits on generation failure
+
+### API Endpoints (tRPC)
+
+**Credits Router** (`routers/credits.ts`):
+- `getBalance`: Returns user's current credit balance
+- `getTransactions`: Paginated transaction history
+
+**Generation Router** (`routers/generation.ts`):
+- `create`: Validates credits, deducts 1 credit, queues generation job
+- `getById`: Fetch session details with job status
+- `getHistory`: Paginated history with optional status filter
+- `getStats`: User generation statistics
+
+### Generation Pipeline
+
+1. User uploads images → Supabase Storage
+2. Mobile app calls `generation.create()` → Deducts 1 credit
+3. Job added to BullMQ queue → Returns session_id
+4. Mobile app subscribes to Supabase Realtime for status updates
+5. **Background Worker**:
+   - Downloads images from Supabase Storage
+   - Creates collage using Sharp (high quality, 2048x2048)
+   - Uploads collage to Supabase Storage
+   - Calls Grok API with collage URL + prompts (generates 1 image)
+   - Saves result URL in generation_sessions
+   - Updates status → Triggers Realtime notification
+6. Mobile app receives update instantly via WebSocket
+
+### Privacy & Cleanup
+
+- **6-hour expiry**: All images deleted after 6 hours
+- **Vercel Cron**: Runs every 6 hours (`/api/cron/cleanup`)
+- **Database**: Only stores metadata with URLs (which expire)
+- **No long-term storage**: Generated images saved only to user's device
+
+### Status Updates
+
+**Primary**: Supabase Realtime (WebSocket)
+- Mobile app subscribes to `generation_sessions` table updates
+- Instant notifications when status changes
+
+**Fallback**: Polling every 2 seconds
+- Timeout after 10 seconds if no Realtime update
+- Query `generation.getById()` for status
+
+### Environment Setup
+
+Required environment variables (`.env.local`):
+- `GROK_API_KEY`: x.ai API key for image generation
+- `REDIS_URL`: Upstash Redis connection string
+- `SUPABASE_SERVICE_ROLE_KEY`: For worker operations
+- `CRON_SECRET`: Security for Vercel Cron endpoint
+
+### Development Workflow
+
+**Terminal 1**: Next.js backend + frontend
+```bash
+yarn web
+```
+
+**Terminal 2**: Background worker
+```bash
+cd packages/api
+yarn worker
+```
+
+### Testing
+
+1. Sign up → Check you received 10 free credits
+2. Call `generation.create()` with image URLs
+3. Worker should process job and update session
+4. Check Realtime updates arrive in mobile app
+
+### Documentation
+
+- [QUICKSTART.md](../QUICKSTART.md): 5-minute setup guide
+- [SETUP.md](../SETUP.md): Complete installation guide
+- [supabase/README.md](../supabase/README.md): Database setup details

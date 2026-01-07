@@ -12,6 +12,9 @@ This is a **Tamagui + Solito + Next.js + Expo monorepo** for building universal 
 - **Next.js 16**: Web application (React 19)
 - **Expo SDK 53**: Native iOS/Android application
 - **React 19**: Shared across platforms
+- **tRPC**: Type-safe API layer with end-to-end type safety
+- **Supabase**: Backend as a Service (auth, database, storage)
+- **React Query**: Data fetching and caching
 - **Biome**: Linting and formatting
 - **Vitest**: Testing framework
 - **Yarn 4.5**: Package manager
@@ -66,10 +69,14 @@ yarn check-tamagui           # Verify Tamagui installation
 apps/
   expo/          - Native iOS/Android app using Expo Router
   next/          - Web app using Next.js App Router
+    app/api/trpc/[trpc]/route.ts - tRPC API endpoint handler
 packages/
+  api/           - tRPC server with Supabase integration
+    routers/     - API routers (auth, user, storage)
   app/           - Shared application logic and features
     features/    - Feature-based organization (NOT screens/)
     provider/    - Platform-specific and shared providers
+    utils/       - Shared utilities (tRPC client, Supabase client)
   ui/            - Custom UI component library (@my/ui)
   config/        - Shared configuration (Tamagui config)
 ```
@@ -78,7 +85,8 @@ packages/
 The codebase uses **feature-based** organization in `packages/app/features/`, not a `screens/` folder. Organize code by feature domains (e.g., `user/`, `home/`) rather than technical layers.
 
 ### Shared Code Strategy
-- **packages/app**: Contains features, navigation, and business logic shared across platforms
+- **packages/api**: tRPC server-side API with Supabase integration
+- **packages/app**: Contains features, navigation, business logic, and API clients shared across platforms
 - **packages/ui**: Contains Tamagui-based UI components following the design system
 - **packages/config**: Shared configuration including Tamagui theme setup
 
@@ -173,6 +181,79 @@ Use EAS Build for native app deployment. See Expo documentation.
 - **Husky**: Git hooks configured (see `.husky/`)
 - **Monorepo Resolutions**: Specific versions pinned for React, React Native Web, SVG (see `resolutions` in root `package.json`)
 
+## tRPC + Supabase Integration
+
+### API Structure (`packages/api`)
+
+The API is built with tRPC and Supabase, providing type-safe end-to-end API calls:
+
+**Routers:**
+- **auth**: Authentication (signUp, signIn, signOut, session, updatePassword)
+- **user**: User management (me, byId, update)
+- **storage**: File storage (upload, getSignedUrl, delete, listFiles)
+
+**Protected Procedures**: Use `protectedProcedure` for authenticated-only endpoints. Middleware automatically checks for valid user session.
+
+### Client Usage
+
+Import the tRPC client from `packages/app/utils/trpc.ts`:
+
+```typescript
+import { trpc } from '../utils/trpc'
+
+// In a component
+function MyComponent() {
+  // Query
+  const { data, isLoading } = trpc.user.me.useQuery()
+
+  // Mutation
+  const signIn = trpc.auth.signIn.useMutation()
+
+  return <Button onPress={() => signIn.mutate({ email, password })} />
+}
+```
+
+### Supabase Client
+
+Platform-aware Supabase clients in `packages/app/utils/supabase.ts`:
+- **Web**: Uses localStorage for session persistence
+- **Native**: Uses AsyncStorage for session persistence
+
+Access current user via `useSupabase()` hook from `SupabaseProvider`.
+
+### Environment Variables
+
+**Next.js** (`apps/next/.env`):
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
+SUPABASE_SERVICE_ROLE_KEY=xxx  # Server-side only
+NEXT_PUBLIC_API_URL=http://localhost:3000/api/trpc
+```
+
+**Expo** (`apps/expo/.env`):
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=xxx
+EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:3000/api/trpc
+```
+
+### Provider Hierarchy
+
+Providers wrap the app in this order (see `packages/app/provider/index.tsx`):
+1. **SupabaseProvider** - Auth state management
+2. **TRPCProvider** - API client with React Query
+3. **TamaguiProvider** - UI styling
+4. **ToastProvider** - Toast notifications
+
+### Adding New API Endpoints
+
+1. Create router in `packages/api/src/routers/`
+2. Add to `packages/api/src/routers/_app.ts`
+3. Use `publicProcedure` or `protectedProcedure`
+4. Define input schema with Zod
+5. Client automatically gets type-safe access
+
 ## Common Patterns
 
 1. **Creating Features**: Organize by feature in `packages/app/features/`, not by screen
@@ -180,3 +261,5 @@ Use EAS Build for native app deployment. See Expo documentation.
 3. **Providers**: Platform-specific providers in `packages/app/provider/` (e.g., `NextTamaguiProvider.tsx` for web)
 4. **Navigation**: Use Solito's `Link` component for cross-platform routing
 5. **Styling**: Prefer Tamagui components and styling props over raw CSS/StyleSheet
+6. **API Calls**: Use tRPC hooks (`trpc.*.useQuery()`, `trpc.*.useMutation()`) instead of fetch/axios
+7. **Authentication**: Access user via `useSupabase()` hook, check `user` and `session` state

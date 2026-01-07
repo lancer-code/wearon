@@ -1,6 +1,6 @@
 import { Worker, Job } from 'bullmq'
 import { createClient } from '@supabase/supabase-js'
-import Redis from 'ioredis'
+import IORedis from 'ioredis'
 import type { GenerationJobData } from '../services/queue'
 import { createCollage, type ImageInput } from '../services/image-processor'
 import { generateImage, GrokAPIError } from '../services/grok'
@@ -15,10 +15,9 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-// Redis connection
-const redisConnection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+// Redis connection for Upstash (with full auth URL)
+const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
-  enableReadyCheck: false,
 })
 
 /**
@@ -187,7 +186,7 @@ export const generationWorker = new Worker<GenerationJobData>(
   'image-generation',
   processGenerationJob,
   {
-    connection: redisConnection,
+    connection: redisConnection as any, // Type assertion due to BullMQ bundled ioredis version mismatch
     concurrency: 5, // Process up to 5 jobs concurrently
     limiter: {
       max: 300,

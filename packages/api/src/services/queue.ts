@@ -1,10 +1,9 @@
 import { Queue, Worker, Job, QueueEvents } from 'bullmq'
-import Redis from 'ioredis'
+import IORedis from 'ioredis'
 
-// Redis connection configuration
-const redisConnection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+// Redis connection for Upstash (with full auth URL)
+const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
-  enableReadyCheck: false,
 })
 
 // Job data interface
@@ -20,7 +19,7 @@ export interface GenerationJobData {
 
 // Queue configuration
 export const generationQueue = new Queue<GenerationJobData>('image-generation', {
-  connection: redisConnection,
+  connection: redisConnection as any, // Type assertion due to BullMQ bundled ioredis version mismatch
   defaultJobOptions: {
     attempts: 3, // Retry failed jobs up to 3 times
     backoff: {
@@ -36,15 +35,11 @@ export const generationQueue = new Queue<GenerationJobData>('image-generation', 
       age: 7 * 24 * 3600, // Keep failed jobs for 7 days
     },
   },
-  limiter: {
-    max: 300, // Maximum 300 jobs
-    duration: 60000, // Per 60 seconds (1 minute)
-  },
 })
 
 // Queue events for monitoring
 export const generationQueueEvents = new QueueEvents('image-generation', {
-  connection: redisConnection,
+  connection: redisConnection as any,
 })
 
 /**
@@ -132,7 +127,6 @@ export async function cleanOldJobs() {
 export async function closeQueue() {
   await generationQueue.close()
   await generationQueueEvents.close()
-  await redisConnection.quit()
 }
 
 // Export types

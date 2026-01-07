@@ -101,4 +101,4 @@ To run the Expo app:
 
 ---
 
-Full documentation: [SETUP.md](./SETUP.md)
+Full documentation: [SETUP.md](SETUP.md)

@@ -1,10 +1,14 @@
 import axios, { AxiosError } from 'axios'
 
 const GROK_API_BASE_URL = 'https://api.x.ai/v1'
-const GROK_API_KEY = process.env.GROK_API_KEY
 
-if (!GROK_API_KEY) {
-  console.warn('WARNING: GROK_API_KEY environment variable is not set')
+// Get API key at runtime (not at import time) to allow dotenv to load first
+function getApiKey(): string {
+  const key = process.env.GROK_API_KEY
+  if (!key) {
+    throw new Error('GROK_API_KEY environment variable is not set')
+  }
+  return key
 }
 
 export interface GrokGenerationOptions {
@@ -42,10 +46,7 @@ export async function generateImage(
   options: GrokGenerationOptions,
 ): Promise<GrokGenerationResponse> {
   const { imageUrl, systemPrompt, userPrompt, model = 'grok-2-image' } = options
-
-  if (!GROK_API_KEY) {
-    throw new GrokAPIError('GROK_API_KEY is not configured')
-  }
+  const apiKey = getApiKey() // Get API key at runtime
 
   try {
     const response = await axios.post(
@@ -58,7 +59,7 @@ export async function generateImage(
       },
       {
         headers: {
-          Authorization: `Bearer ${GROK_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         timeout: 120000, // 2 minute timeout for image generation

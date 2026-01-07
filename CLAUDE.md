@@ -14,6 +14,7 @@ This is a **Tamagui + Solito + Next.js + Expo monorepo** for building universal 
 - **React 19**: Shared across platforms
 - **tRPC**: Type-safe API layer with end-to-end type safety
 - **Supabase**: Backend as a Service (auth, database, storage)
+- **Axios**: HTTP client for all API requests (preferred over fetch)
 - **React Query**: Data fetching and caching
 - **Biome**: Linting and formatting
 - **Vitest**: Testing framework
@@ -254,6 +255,31 @@ Providers wrap the app in this order (see `packages/app/provider/index.tsx`):
 4. Define input schema with Zod
 5. Client automatically gets type-safe access
 
+## HTTP Client (Axios)
+
+**IMPORTANT**: Always use **axios** for HTTP requests, not fetch.
+
+```typescript
+import axios from 'axios'
+
+// Example GET request
+const response = await axios.get('/api/endpoint')
+
+// Example POST request
+const response = await axios.post('/api/endpoint', {
+  data: 'value'
+})
+
+// With headers
+const response = await axios.get('/api/endpoint', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+})
+```
+
+Axios is installed in both `apps/next` and `apps/expo` for consistent HTTP client usage across platforms.
+
 ## Common Patterns
 
 1. **Creating Features**: Organize by feature in `packages/app/features/`, not by screen
@@ -261,5 +287,6 @@ Providers wrap the app in this order (see `packages/app/provider/index.tsx`):
 3. **Providers**: Platform-specific providers in `packages/app/provider/` (e.g., `NextTamaguiProvider.tsx` for web)
 4. **Navigation**: Use Solito's `Link` component for cross-platform routing
 5. **Styling**: Prefer Tamagui components and styling props over raw CSS/StyleSheet
-6. **API Calls**: Use tRPC hooks (`trpc.*.useQuery()`, `trpc.*.useMutation()`) instead of fetch/axios
+6. **API Calls**: **ALWAYS use axios** for HTTP requests, never use fetch
 7. **Authentication**: Access user via `useSupabase()` hook, check `user` and `session` state
+8. **Type Safety**: Use tRPC for type-safe API endpoints when needed, but prefer axios for REST calls

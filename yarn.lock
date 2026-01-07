@@ -3491,6 +3491,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@react-native-google-signin/google-signin@npm:^16.1.1":
+  version: 16.1.1
+  resolution: "@react-native-google-signin/google-signin@npm:16.1.1"
+  peerDependencies:
+    expo: ">=52.0.40"
+    react: "*"
+    react-native: "*"
+  peerDependenciesMeta:
+    expo:
+      optional: true
+  checksum: 10/c376c04f44cb2abac09c95607aabac6c471b7e89b257a4fb70a9700aab8c608a88d114d3a520f5bfa003fdc3fa3f657e818aa791e8da73ead862437e6d68168f
+  languageName: node
+  linkType: hard
+
 "@react-native/assets-registry@npm:0.79.2":
   version: 0.79.2
   resolution: "@react-native/assets-registry@npm:0.79.2"
@@ -9779,6 +9793,7 @@ __metadata:
     "@expo/metro-config": "npm:~0.20.0"
     "@my/ui": "npm:0.0.1"
     "@react-native-async-storage/async-storage": "npm:^2.1.0"
+    "@react-native-google-signin/google-signin": "npm:^16.1.1"
     "@react-navigation/bottom-tabs": "npm:^7.3.12"
     "@react-navigation/native": "npm:^7.1.8"
     "@tamagui/babel-plugin": "npm:^1.143.1"

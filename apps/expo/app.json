@@ -15,7 +15,9 @@
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.umperasofts.wearon"
@@ -34,10 +36,17 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-system-ui"
+      "expo-system-ui",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f75915df-aa23-476c-b491-5d633da91f1c"
+      }
     }
   }
 }

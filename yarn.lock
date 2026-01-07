@@ -7007,6 +7007,7 @@ __metadata:
     "@types/node": "npm:^25.0.3"
     "@types/sharp": "npm:^0.32.0"
     bullmq: "npm:^5.66.4"
+    dotenv: "npm:^17.2.3"
     ioredis: "npm:^5.9.0"
     sharp: "npm:^0.34.5"
     superjson: "npm:^2.2.2"
@@ -8693,6 +8694,13 @@ __metadata:
   version: 16.4.7
   resolution: "dotenv@npm:16.4.7"
   checksum: 10/f13bfe97db88f0df4ec505eeffb8925ec51f2d56a3d0b6d916964d8b4af494e6fb1633ba5d09089b552e77ab2a25de58d70259b2c5ed45ec148221835fc99a0c
+  languageName: node
+  linkType: hard
+
+"dotenv@npm:^17.2.3":
+  version: 17.2.3
+  resolution: "dotenv@npm:17.2.3"
+  checksum: 10/f8b78626ebfff6e44420f634773375c9651808b3e1a33df6d4cc19120968eea53e100f59f04ec35f2a20b2beb334b6aba4f24040b2f8ad61773f158ac042a636
   languageName: node
   linkType: hard
 

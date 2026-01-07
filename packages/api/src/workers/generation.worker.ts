@@ -1,9 +1,16 @@
 import { Worker, Job } from 'bullmq'
 import { createClient } from '@supabase/supabase-js'
 import IORedis from 'ioredis'
+import dotenv from 'dotenv'
+import { resolve } from 'path'
 import type { GenerationJobData } from '../services/queue'
 import { createCollage, type ImageInput } from '../services/image-processor'
 import { generateImage, GrokAPIError } from '../services/grok'
+
+// Load environment variables from apps/next/.env.local
+const envPath = resolve(process.cwd(), '../../apps/next/.env.local')
+dotenv.config({ path: envPath })
+console.log('[Worker] Loaded env from:', envPath)
 
 // Initialize Supabase client with service role key (for worker operations)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''

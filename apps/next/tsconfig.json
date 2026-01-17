@@ -10,7 +10,8 @@
     "paths": {
       "react-native": [
         "react-native-web"
-      ]
+      ],
+      "@/*": ["./*"]
     },
     "allowJs": true,
     "skipLibCheck": true,

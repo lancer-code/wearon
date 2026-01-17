@@ -2,6 +2,8 @@ import { initTRPC, TRPCError } from '@trpc/server'
 import type { FetchCreateContextFnOptions } from '@trpc/server/adapters/fetch'
 import superjson from 'superjson'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { checkPermission, checkRole } from './utils/rbac'
+import type { PermissionName, RoleName } from './utils/rbac'
 
 export interface Context {
   supabase: SupabaseClient
@@ -44,3 +46,56 @@ export const protectedProcedure = t.procedure.use(async (opts) => {
     },
   })
 })
+
+// Admin procedure - requires admin role
+export const adminProcedure = protectedProcedure.use(async (opts) => {
+  const { ctx } = opts
+
+  const isAdmin = await checkRole(ctx.supabase, ctx.user.id, 'admin')
+
+  if (!isAdmin) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'You do not have permission to access this resource',
+    })
+  }
+
+  return opts.next({ ctx })
+})
+
+// Moderator procedure - requires moderator or admin role
+export const moderatorProcedure = protectedProcedure.use(async (opts) => {
+  const { ctx } = opts
+
+  const [isMod, isAdmin] = await Promise.all([
+    checkRole(ctx.supabase, ctx.user.id, 'moderator'),
+    checkRole(ctx.supabase, ctx.user.id, 'admin'),
+  ])
+
+  if (!isMod && !isAdmin) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'You do not have permission to access this resource',
+    })
+  }
+
+  return opts.next({ ctx })
+})
+
+// Permission-based procedure factory
+export function withPermission(permission: PermissionName) {
+  return protectedProcedure.use(async (opts) => {
+    const { ctx } = opts
+
+    const hasPermission = await checkPermission(ctx.supabase, ctx.user.id, permission)
+
+    if (!hasPermission) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: `You do not have the required permission: ${permission}`,
+      })
+    }
+
+    return opts.next({ ctx })
+  })
+}

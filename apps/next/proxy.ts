@@ -34,10 +34,25 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Protected routes - redirect to login if not authenticated
-  if (pathname.startsWith('/dashboard') && !user) {
+  if ((pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
+  }
+
+  // Admin routes - check for admin role
+  if (pathname.startsWith('/admin') && user) {
+    const { data: isAdmin } = await supabase.rpc('user_has_role', {
+      p_user_id: user.id,
+      p_role_name: 'admin',
+    })
+
+    if (!isAdmin) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      url.searchParams.set('error', 'unauthorized')
+      return NextResponse.redirect(url)
+    }
   }
 
   // Auth routes - redirect to dashboard if already authenticated
@@ -51,5 +66,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login', '/signup'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/login', '/signup'],
 }

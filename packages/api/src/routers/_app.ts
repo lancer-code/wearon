@@ -5,6 +5,7 @@ import { storageRouter } from './storage'
 import { creditsRouter } from './credits'
 import { generationRouter } from './generation'
 import { analyticsRouter } from './analytics'
+import { rolesRouter } from './roles'
 
 export const appRouter = router({
   auth: authRouter,
@@ -13,6 +14,7 @@ export const appRouter = router({
   credits: creditsRouter,
   generation: generationRouter,
   analytics: analyticsRouter,
+  roles: rolesRouter,
 })
 
 export type AppRouter = typeof appRouter

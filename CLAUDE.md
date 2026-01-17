@@ -293,6 +293,113 @@ Providers wrap the app in this order (see `packages/app/provider/index.tsx`):
 4. Define input schema with Zod
 5. Client automatically gets type-safe access
 
+## Role-Based Access Control (RBAC)
+
+The platform implements a full RBAC system with separate roles and permissions tables for granular access control.
+
+### Database Schema (`supabase/migrations/003_rbac_schema.sql`)
+
+**Tables:**
+- `roles`: Available roles (user, moderator, admin)
+- `permissions`: Available permissions (e.g., users:read, generations:create)
+- `role_permissions`: Many-to-many mapping of roles to permissions
+- `user_roles`: Assigns roles to users
+
+**Database Functions (RPC):**
+- `user_has_permission(user_id, permission_name)`: Check if user has permission
+- `user_has_role(user_id, role_name)`: Check if user has role
+- `get_user_permissions(user_id)`: Get all permissions for a user
+- `get_user_roles(user_id)`: Get all roles for a user
+
+### Default Roles & Permissions
+
+| Role | Permissions |
+|------|-------------|
+| **user** | users:read, generations:read, generations:create, credits:read |
+| **moderator** | All user permissions + users:write, generations:delete, analytics:read |
+| **admin** | All permissions including users:manage, credits:manage, admin:access, roles:manage |
+
+New users automatically receive the `user` role via database trigger.
+
+### API Procedures (`packages/api/src/trpc.ts`)
+
+```typescript
+// Protected - requires authentication
+export const protectedProcedure = t.procedure.use(...)
+
+// Admin only - requires admin role
+export const adminProcedure = protectedProcedure.use(...)
+
+// Moderator - requires moderator or admin role
+export const moderatorProcedure = protectedProcedure.use(...)
+
+// Custom permission check
+export function withPermission(permission: PermissionName) {...}
+```
+
+**Usage in routers:**
+```typescript
+import { adminProcedure, withPermission } from '../trpc'
+
+export const myRouter = router({
+  // Only admins can access
+  adminOnly: adminProcedure.query(...),
+
+  // Requires specific permission
+  manageCredits: withPermission('credits:manage').mutation(...),
+})
+```
+
+### Roles Router (`packages/api/src/routers/roles.ts`)
+
+| Endpoint | Access | Description |
+|----------|--------|-------------|
+| `roles.myRoles` | Protected | Get current user's roles |
+| `roles.myPermissions` | Protected | Get current user's permissions |
+| `roles.list` | Protected | List all available roles |
+| `roles.listPermissions` | Protected | List all available permissions |
+| `roles.getUserRoles` | Admin | Get roles for any user |
+| `roles.assign` | Admin | Assign role to user |
+| `roles.remove` | Admin | Remove role from user |
+| `roles.listUsersWithRoles` | Admin | Paginated user list with roles |
+
+### Client-Side Usage (`useSupabase()` hook)
+
+```typescript
+import { useSupabase } from 'app/provider/SupabaseProvider'
+
+function MyComponent() {
+  const {
+    roles,           // RoleName[] - user's roles
+    permissions,     // PermissionName[] - user's permissions
+    hasRole,         // (role: RoleName) => boolean
+    hasPermission,   // (permission: PermissionName) => boolean
+    isAdmin,         // boolean - shorthand for hasRole('admin')
+    isModerator,     // boolean - admin or moderator
+    refreshRoles,    // () => Promise<void> - refresh after role change
+  } = useSupabase()
+
+  if (!hasPermission('analytics:read')) {
+    return <Text>No access</Text>
+  }
+
+  return <AnalyticsDashboard />
+}
+```
+
+### Admin Route Protection (`apps/next/proxy.ts`)
+
+The Next.js proxy protects `/admin/*` routes server-side:
+- Checks for admin role via `supabase.rpc('user_has_role')`
+- Non-admins redirected to `/dashboard?error=unauthorized`
+
+### Adding New Permissions
+
+1. Add to `003_rbac_schema.sql` INSERT statement
+2. Add type to `packages/api/src/utils/rbac.ts` `PermissionName`
+3. Add type to `packages/app/provider/SupabaseProvider.tsx` `PermissionName`
+4. Assign to roles in `role_permissions` table
+
 ## HTTP Client (Axios)
 
 **IMPORTANT**: Always use **axios** for HTTP requests, not fetch.

@@ -83,21 +83,29 @@ apps/
   next/          - Web app using Next.js App Router
     app/
       (auth)/    - Auth route group (login, signup pages)
-      api/       - API routes (trpc, auth callback)
+      admin/     - Admin panel (admin/moderator only)
+      api/       - API routes (trpc, auth callback, cron)
       dashboard/ - Protected dashboard page
-    proxy.ts     - Route protection (auth redirects)
+      not-found.tsx - 404 page
+    proxy.ts     - Route protection (auth + role checks)
     utils/supabase/ - Server-side Supabase clients
 packages/
   api/           - tRPC server with Supabase integration
-    routers/     - API routers (auth, user, storage)
+    routers/     - API routers (auth, user, storage, roles)
+    utils/       - Server utilities (rbac.ts)
   app/           - Shared application logic and features
     features/    - Feature-based organization (NOT screens/)
+      admin/     - Admin panel screen
       auth/      - Login, signup, Google OAuth components
       dashboard/ - Dashboard screen
     provider/    - Platform-specific and shared providers
     utils/       - Shared utilities (tRPC client, Supabase client)
   ui/            - Custom UI component library (@my/ui)
   config/        - Shared configuration (Tamagui config)
+docs/
+  RBAC.md        - Role-based access control documentation
+supabase/
+  migrations/    - Database migrations (001-003)
 ```
 
 ### Feature-Based Organization
@@ -210,6 +218,10 @@ The API is built with tRPC and Supabase, providing type-safe end-to-end API call
 - **auth**: Authentication (signUp, signIn, signOut, session, updatePassword)
 - **user**: User management (me, byId, update)
 - **storage**: File storage (upload, getSignedUrl, delete, listFiles)
+- **roles**: Role management (myRoles, myPermissions, assign, remove) - see RBAC section
+- **credits**: Credit balance and transactions
+- **generation**: Virtual try-on generation
+- **analytics**: Platform analytics
 
 **Protected Procedures**: Use `protectedProcedure` for authenticated-only endpoints. Middleware automatically checks for valid user session.
 
@@ -390,8 +402,9 @@ function MyComponent() {
 ### Admin Route Protection (`apps/next/proxy.ts`)
 
 The Next.js proxy protects `/admin/*` routes server-side:
-- Checks for admin role via `supabase.rpc('user_has_role')`
-- Non-admins redirected to `/dashboard?error=unauthorized`
+- Checks for admin OR moderator role via `supabase.rpc('user_has_role')`
+- Unauthorized users see 404 page (rewrite, not redirect)
+- Unauthenticated users redirected to `/login`
 
 ### Adding New Permissions
 
@@ -541,3 +554,4 @@ yarn worker
 - [QUICKSTART.md](../QUICKSTART.md): 5-minute setup guide
 - [SETUP.md](../SETUP.md): Complete installation guide
 - [supabase/README.md](../supabase/README.md): Database setup details
+- [docs/RBAC.md](../docs/RBAC.md): Role-based access control implementation

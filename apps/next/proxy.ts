@@ -40,18 +40,17 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Admin routes - check for admin role
+  // Admin routes - check for admin or moderator role
   if (pathname.startsWith('/admin') && user) {
-    const { data: isAdmin } = await supabase.rpc('user_has_role', {
-      p_user_id: user.id,
-      p_role_name: 'admin',
-    })
+    const [{ data: isAdmin }, { data: isModerator }] = await Promise.all([
+      supabase.rpc('user_has_role', { p_user_id: user.id, p_role_name: 'admin' }),
+      supabase.rpc('user_has_role', { p_user_id: user.id, p_role_name: 'moderator' }),
+    ])
 
-    if (!isAdmin) {
+    if (!isAdmin && !isModerator) {
       const url = request.nextUrl.clone()
-      url.pathname = '/dashboard'
-      url.searchParams.set('error', 'unauthorized')
-      return NextResponse.redirect(url)
+      url.pathname = '/404'
+      return NextResponse.rewrite(url)
     }
   }
 

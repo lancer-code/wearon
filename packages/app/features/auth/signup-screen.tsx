@@ -11,33 +11,51 @@ import {
   Spinner,
   useToastController,
 } from '@my/ui'
-import { useLink } from 'solito/navigation'
+import { useLink, useRouter } from 'solito/navigation'
+import { z } from 'zod'
 import { AuthFormContainer } from './auth-form-container'
 import { GoogleSignInButton } from './google-sign-in-button'
 import { supabase } from '../../utils/supabase'
+
+const signupSchema = z.object({
+  email: z.string().min(1, 'Email is required').email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string().min(1, 'Please confirm your password'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+})
+
+type SignupErrors = {
+  email?: string
+  password?: string
+  confirmPassword?: string
+}
 
 export function SignupScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<SignupErrors>({})
   const toast = useToastController()
+  const router = useRouter()
 
   const loginLink = useLink({ href: '/login' })
 
   const handleEmailSignUp = async () => {
-    if (!email || !password || !confirmPassword) {
-      toast.show('Please fill in all fields', { type: 'error' })
-      return
-    }
+    setErrors({})
 
-    if (password !== confirmPassword) {
-      toast.show('Passwords do not match', { type: 'error' })
-      return
-    }
+    const result = signupSchema.safeParse({ email, password, confirmPassword })
 
-    if (password.length < 6) {
-      toast.show('Password must be at least 6 characters', { type: 'error' })
+    if (!result.success) {
+      const fieldErrors: SignupErrors = {}
+      for (const error of result.error.errors) {
+        const field = error.path[0] as keyof SignupErrors
+        if (field) fieldErrors[field] = error.message
+      }
+      setErrors(fieldErrors)
+      toast.show(result.error.errors[0].message, { type: 'error' })
       return
     }
 
@@ -50,11 +68,14 @@ export function SignupScreen() {
       })
 
       if (error) {
+        console.error('Signup error:', error)
         throw error
       }
 
-      toast.show('Check your email to confirm your account', { type: 'success' })
+      toast.show('Account created successfully!', { type: 'success' })
+      router.push('/dashboard')
     } catch (error) {
+      console.error('Signup failed:', error)
       toast.show((error as Error).message, { type: 'error' })
     } finally {
       setLoading(false)
@@ -99,11 +120,15 @@ export function SignupScreen() {
             size="$5"
             placeholder="Enter your email"
             value={email}
-            onChange={(e) => setEmail(e.nativeEvent.text)}
+            onChange={(e: any) => setEmail(e.target?.value ?? e.nativeEvent?.text ?? '')}
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
+            borderColor={errors.email ? '$red10' : undefined}
           />
+          {errors.email && (
+            <Text fontSize="$2" color="$red10">{errors.email}</Text>
+          )}
         </YStack>
 
         <YStack gap="$2">
@@ -114,10 +139,14 @@ export function SignupScreen() {
             size="$5"
             placeholder="Create a password"
             value={password}
-            onChange={(e) => setPassword(e.nativeEvent.text)}
+            onChange={(e: any) => setPassword(e.target?.value ?? e.nativeEvent?.text ?? '')}
             secureTextEntry
             autoComplete="new-password"
+            borderColor={errors.password ? '$red10' : undefined}
           />
+          {errors.password && (
+            <Text fontSize="$2" color="$red10">{errors.password}</Text>
+          )}
         </YStack>
 
         <YStack gap="$2">
@@ -128,10 +157,14 @@ export function SignupScreen() {
             size="$5"
             placeholder="Confirm your password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.nativeEvent.text)}
+            onChange={(e: any) => setConfirmPassword(e.target?.value ?? e.nativeEvent?.text ?? '')}
             secureTextEntry
             autoComplete="new-password"
+            borderColor={errors.confirmPassword ? '$red10' : undefined}
           />
+          {errors.confirmPassword && (
+            <Text fontSize="$2" color="$red10">{errors.confirmPassword}</Text>
+          )}
         </YStack>
 
         <Button

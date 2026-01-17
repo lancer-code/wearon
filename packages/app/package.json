@@ -9,6 +9,7 @@
   "dependencies": {
     "@my/ui": "0.0.1",
     "@react-navigation/native": "^6.1.17",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.48.1",
     "@tamagui/animations-react-native": "^1.143.1",
     "@tamagui/colors": "^1.143.1",

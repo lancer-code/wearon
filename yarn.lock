@@ -4171,6 +4171,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@supabase/ssr@npm:^0.8.0":
+  version: 0.8.0
+  resolution: "@supabase/ssr@npm:0.8.0"
+  dependencies:
+    cookie: "npm:^1.0.2"
+  peerDependencies:
+    "@supabase/supabase-js": ^2.76.1
+  checksum: 10/db03236c12de8b15d279c0f24cf3a0432e50ed5e44c4eae0e42ec10a46b246a6aa55358051fabb2716b660ebb680bb9616d87afc58cff12a884992331bccb4ff
+  languageName: node
+  linkType: hard
+
 "@supabase/storage-js@npm:2.89.0":
   version: 2.89.0
   resolution: "@supabase/storage-js@npm:2.89.0"
@@ -7154,6 +7165,7 @@ __metadata:
   dependencies:
     "@my/ui": "npm:0.0.1"
     "@react-navigation/native": "npm:^6.1.17"
+    "@supabase/ssr": "npm:^0.8.0"
     "@supabase/supabase-js": "npm:^2.48.1"
     "@tamagui/animations-react-native": "npm:^1.143.1"
     "@tamagui/colors": "npm:^1.143.1"
@@ -8395,6 +8407,13 @@ __metadata:
   version: 0.7.2
   resolution: "cookie@npm:0.7.2"
   checksum: 10/24b286c556420d4ba4e9bc09120c9d3db7d28ace2bd0f8ccee82422ce42322f73c8312441271e5eefafbead725980e5996cc02766dbb89a90ac7f5636ede608f
+  languageName: node
+  linkType: hard
+
+"cookie@npm:^1.0.2":
+  version: 1.1.1
+  resolution: "cookie@npm:1.1.1"
+  checksum: 10/85538153054791155cf4d38d2e807e3b9382d71bf71d92fc46fca348515ea574049d0d9ef8eb84d2d54a681ad1d7a7316b1989b901dace50a6c0f4c3858dbdb2
   languageName: node
   linkType: hard
 

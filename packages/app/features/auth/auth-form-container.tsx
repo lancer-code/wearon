@@ -1,6 +1,6 @@
 'use client'
 
-import { XStack, YStack, Image, useMedia } from '@my/ui'
+import { XStack, YStack, Image } from '@my/ui'
 import type { ReactNode } from 'react'
 import { Platform } from 'react-native'
 
@@ -9,9 +9,6 @@ interface AuthFormContainerProps {
 }
 
 export function AuthFormContainer({ children }: AuthFormContainerProps) {
-  const media = useMedia()
-  const showIllustration = media.gtMd
-
   return (
     <XStack flex={1} minHeight="100vh" bg="$background">
       {/* Left: Form Section */}
@@ -44,31 +41,36 @@ export function AuthFormContainer({ children }: AuthFormContainerProps) {
         </YStack>
       </YStack>
 
-      {/* Right: Fashion Illustration (hidden on mobile/tablet) */}
-      {showIllustration && (
-        <YStack
-          flex={1}
-          overflow="hidden"
-          bg="$blue2"
+      {/* Right: Fashion Illustration (hidden on mobile/tablet via CSS) */}
+      {Platform.OS === 'web' && (
+        <div
+          className="auth-illustration-panel"
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            backgroundColor: 'var(--blue2)',
+          }}
         >
-          {Platform.OS === 'web' ? (
-            <img
-              src="/auth-illustration.png"
-              alt="Fashion illustration"
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-              }}
-            />
-          ) : (
-            <Image
-              source={{ uri: '/auth-illustration.png' }}
-              flex={1}
-              resizeMode="cover"
-            />
-          )}
-        </YStack>
+          <style>{`
+            .auth-illustration-panel {
+              display: none;
+            }
+            @media (min-width: 900px) {
+              .auth-illustration-panel {
+                display: flex;
+              }
+            }
+          `}</style>
+          <img
+            src="/auth-illustration.png"
+            alt="Fashion illustration"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          />
+        </div>
       )}
     </XStack>
   )

@@ -81,12 +81,19 @@ yarn check-tamagui           # Verify Tamagui installation
 apps/
   expo/          - Native iOS/Android app using Expo Router
   next/          - Web app using Next.js App Router
-    app/api/trpc/[trpc]/route.ts - tRPC API endpoint handler
+    app/
+      (auth)/    - Auth route group (login, signup pages)
+      api/       - API routes (trpc, auth callback)
+      dashboard/ - Protected dashboard page
+    proxy.ts     - Route protection (auth redirects)
+    utils/supabase/ - Server-side Supabase clients
 packages/
   api/           - tRPC server with Supabase integration
     routers/     - API routers (auth, user, storage)
   app/           - Shared application logic and features
     features/    - Feature-based organization (NOT screens/)
+      auth/      - Login, signup, Google OAuth components
+      dashboard/ - Dashboard screen
     provider/    - Platform-specific and shared providers
     utils/       - Shared utilities (tRPC client, Supabase client)
   ui/            - Custom UI component library (@my/ui)
@@ -228,8 +235,8 @@ function MyComponent() {
 ### Supabase Client
 
 Platform-aware Supabase clients in `packages/app/utils/supabase.ts`:
-- **Web**: Uses localStorage for session persistence
-- **Native**: Uses AsyncStorage for session persistence
+- **Web**: Uses `@supabase/ssr` with cookie-based storage (works with Next.js proxy)
+- **Native**: Uses standard Supabase client with AsyncStorage
 
 Access current user via `useSupabase()` hook from `SupabaseProvider`.
 
@@ -241,6 +248,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 SUPABASE_SERVICE_ROLE_KEY=xxx  # Server-side only
 NEXT_PUBLIC_API_URL=http://localhost:3000/api/trpc
+NEXT_PUBLIC_SITE_URL=http://localhost:3000  # For OAuth callbacks
 ```
 
 **Expo** (`apps/expo/.env`):
@@ -253,10 +261,29 @@ EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:3000/api/trpc
 ### Provider Hierarchy
 
 Providers wrap the app in this order (see `packages/app/provider/index.tsx`):
-1. **SupabaseProvider** - Auth state management
+1. **SupabaseProvider** - Auth state management + redirect handling
 2. **TRPCProvider** - API client with React Query
 3. **TamaguiProvider** - UI styling
 4. **ToastProvider** - Toast notifications
+
+### Authentication & Route Protection
+
+**Auth Pages** (`packages/app/features/auth/`):
+- `login-screen.tsx` - Email/password login with Google OAuth
+- `signup-screen.tsx` - Registration with email confirmation
+- `google-sign-in-button.tsx` - Google OAuth button component
+- `auth-form-container.tsx` - Two-column layout (form left, illustration right)
+
+**Protected Routes** (`apps/next/proxy.ts`):
+- Uses Next.js proxy (formerly middleware) for server-side route protection
+- `/dashboard/*` - Redirects to `/login` if not authenticated
+- `/login`, `/signup` - Redirects to `/dashboard` if already authenticated
+
+**Client-Side Redirects** (`packages/app/provider/SupabaseProvider.tsx`):
+- Listens for `SIGNED_IN` event → redirects to `/dashboard`
+- Listens for `SIGNED_OUT` event → redirects to `/login`
+
+**Form Validation**: Uses Zod schemas for login/signup validation with inline error display.
 
 ### Adding New API Endpoints
 

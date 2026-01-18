@@ -7,6 +7,7 @@ import type { PermissionName, RoleName } from './utils/rbac'
 
 export interface Context {
   supabase: SupabaseClient
+  adminSupabase: SupabaseClient // Service role client, bypasses RLS
   user: {
     id: string
     email?: string
@@ -17,6 +18,7 @@ export async function createContext(opts: FetchCreateContextFnOptions): Promise<
   // This will be populated by the Next.js API route handler with Supabase client
   return {
     supabase: null as any, // Will be set by API route
+    adminSupabase: null as any, // Will be set by API route
     user: null,
   }
 }

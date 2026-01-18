@@ -5,7 +5,6 @@ import { useDropzone } from 'react-dropzone'
 import { YStack, XStack, Text, Card, Image, Button, PageHeader, PageContent, PageFooter } from '@my/ui'
 import { Upload, X, RotateCcw } from '@tamagui/lucide-icons'
 import { trpc } from '../../utils/trpc'
-import { supabase } from '../../utils/supabase'
 
 interface UploadedImage {
   id: string
@@ -20,12 +19,28 @@ const ACCEPTED_TYPES = {
   'image/webp': ['.webp'],
 }
 
+// Helper to convert File to base64
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = () => {
+      const result = reader.result as string
+      // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
+      const base64 = result.split(',')[1]
+      resolve(base64 || '')
+    }
+    reader.onerror = reject
+  })
+}
+
 export function AdminGenerations() {
   const [images, setImages] = useState<UploadedImage[]>([])
   const [error, setError] = useState<string | null>(null)
   const [stitchedImage, setStitchedImage] = useState<string | null>(null)
   const [isStitching, setIsStitching] = useState(false)
 
+  const adminUploadMutation = trpc.storage.adminUpload.useMutation()
   const stitchMutation = trpc.storage.stitch.useMutation()
 
   const onDrop = useCallback(
@@ -89,28 +104,20 @@ export function AdminGenerations() {
     setError(null)
 
     try {
-      // Upload files directly to Supabase Storage
+      // Upload files via tRPC (uses service role key to bypass RLS)
       const uploadPromises = images.map(async (img) => {
         const fileName = `admin-upload-${Date.now()}-${img.id}.${img.file.name.split('.').pop()}`
         const filePath = `uploads/${fileName}`
+        const fileBase64 = await fileToBase64(img.file)
 
-        const { error: uploadError } = await supabase.storage
-          .from('virtual-tryon-images')
-          .upload(filePath, img.file, {
-            contentType: img.file.type,
-            upsert: true,
-          })
+        const result = await adminUploadMutation.mutateAsync({
+          bucket: 'virtual-tryon-images',
+          path: filePath,
+          fileBase64,
+          contentType: img.file.type,
+        })
 
-        if (uploadError) {
-          throw new Error(`Failed to upload: ${uploadError.message}`)
-        }
-
-        // Get public URL for the uploaded file
-        const { data: urlData } = supabase.storage
-          .from('virtual-tryon-images')
-          .getPublicUrl(filePath)
-
-        return urlData.publicUrl
+        return result.signedUrl
       })
 
       const imageUrls = await Promise.all(uploadPromises)

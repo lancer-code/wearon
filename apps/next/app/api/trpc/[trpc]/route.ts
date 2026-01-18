@@ -7,17 +7,21 @@ const handler = async (req: NextRequest) => {
   // Get Supabase credentials from environment
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
   // Extract authorization header (contains Supabase session token)
   const authHeader = req.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
 
-  // Create Supabase client
+  // Create Supabase client (user context, subject to RLS)
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     },
   })
+
+  // Create admin Supabase client (service role, bypasses RLS)
+  const adminSupabase = createClient(supabaseUrl, supabaseServiceKey)
 
   // Get current user from session
   const {
@@ -31,6 +35,7 @@ const handler = async (req: NextRequest) => {
     createContext: () =>
       Promise.resolve({
         supabase,
+        adminSupabase,
         user: user
           ? {
               id: user.id,

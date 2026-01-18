@@ -1,14 +1,53 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../trpc'
+import { router, protectedProcedure, adminProcedure } from '../trpc'
 import { createCollage } from '../services/image-processor'
 
 export const storageRouter = router({
-  stitch: protectedProcedure
+  // Admin upload - uses service role key to bypass RLS
+  adminUpload: adminProcedure
+    .input(
+      z.object({
+        bucket: z.string(),
+        path: z.string(),
+        fileBase64: z.string(),
+        contentType: z.string(),
+        expiresIn: z.number().optional().default(3600), // 1 hour default
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const fileBuffer = Buffer.from(input.fileBase64, 'base64')
+
+      const { error: uploadError } = await ctx.adminSupabase.storage
+        .from(input.bucket)
+        .upload(input.path, fileBuffer, {
+          contentType: input.contentType,
+          upsert: true,
+        })
+
+      if (uploadError) {
+        throw new Error(`Failed to upload: ${uploadError.message}`)
+      }
+
+      // Create signed URL for private bucket access
+      const { data: signedUrlData, error: signedUrlError } = await ctx.adminSupabase.storage
+        .from(input.bucket)
+        .createSignedUrl(input.path, input.expiresIn)
+
+      if (signedUrlError) {
+        throw new Error(`Failed to create signed URL: ${signedUrlError.message}`)
+      }
+
+      return { signedUrl: signedUrlData.signedUrl }
+    }),
+
+  // Stitch images into collage - admin only, uses service role
+  stitch: adminProcedure
     .input(
       z.object({
         imageUrls: z.array(z.string().url()).min(1).max(6),
         width: z.number().optional().default(2048),
         height: z.number().optional().default(2048),
+        expiresIn: z.number().optional().default(3600), // 1 hour default
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -24,7 +63,7 @@ export const storageRouter = router({
       })
 
       const fileName = `admin-stitch-${Date.now()}.jpg`
-      const { error: uploadError } = await ctx.supabase.storage
+      const { error: uploadError } = await ctx.adminSupabase.storage
         .from('virtual-tryon-images')
         .upload(`stitched/${fileName}`, collageBuffer, {
           contentType: 'image/jpeg',
@@ -35,11 +74,16 @@ export const storageRouter = router({
         throw new Error(`Failed to upload collage: ${uploadError.message}`)
       }
 
-      const { data: urlData } = ctx.supabase.storage
+      // Create signed URL for private bucket access
+      const { data: signedUrlData, error: signedUrlError } = await ctx.adminSupabase.storage
         .from('virtual-tryon-images')
-        .getPublicUrl(`stitched/${fileName}`)
+        .createSignedUrl(`stitched/${fileName}`, input.expiresIn)
 
-      return { url: urlData.publicUrl }
+      if (signedUrlError) {
+        throw new Error(`Failed to create signed URL: ${signedUrlError.message}`)
+      }
+
+      return { url: signedUrlData.signedUrl }
     }),
 
   getPublicUrl: protectedProcedure

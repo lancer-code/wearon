@@ -2,11 +2,12 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { httpBatchLink } from '@trpc/client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import superjson from 'superjson'
 import { trpc } from '../utils/trpc'
 import { useSupabase } from './SupabaseProvider'
 import Constants from 'expo-constants'
+import type { Session } from '@supabase/supabase-js'
 
 function getBaseUrl() {
   if (typeof window !== 'undefined') {
@@ -24,8 +25,16 @@ function getBaseUrl() {
   return `http://localhost:${process.env.PORT ?? 3000}`
 }
 
+// Module-level variable to store current session (accessible by headers function)
+let currentSession: Session | null = null
+
 export function TRPCProvider({ children }: { children: React.ReactNode }) {
   const { session } = useSupabase()
+
+  // Keep the module-level session updated
+  useEffect(() => {
+    currentSession = session
+  }, [session])
 
   const [queryClient] = useState(
     () =>
@@ -48,9 +57,9 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
           headers: async () => {
             const headers: Record<string, string> = {}
 
-            // Attach Supabase session token to requests
-            if (session?.access_token) {
-              headers.authorization = `Bearer ${session.access_token}`
+            // Attach Supabase session token to requests (using current session)
+            if (currentSession?.access_token) {
+              headers.authorization = `Bearer ${currentSession.access_token}`
             }
 
             return headers

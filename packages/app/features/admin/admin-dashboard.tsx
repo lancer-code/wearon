@@ -3,7 +3,7 @@
 import { YStack, XStack, H1, H2, Text, Card, Separator } from '@my/ui'
 import { useSupabase } from '../../provider/SupabaseProvider'
 
-export function AdminScreen() {
+export function AdminDashboard() {
   const { user, roles, isAdmin, isModerator } = useSupabase()
 
   return (
@@ -11,13 +11,10 @@ export function AdminScreen() {
       flex={1}
       padding="$6"
       gap="$6"
-      maxWidth={1200}
-      marginHorizontal="auto"
-      width="100%"
     >
       <YStack gap="$2">
-        <H1>Admin Panel</H1>
-        <Text color="$color10">Welcome, {user?.email}</Text>
+        <H1>Dashboard</H1>
+        <Text color="$color10">Welcome back, {user?.email}</Text>
       </YStack>
 
       <XStack
@@ -70,43 +67,28 @@ export function AdminScreen() {
       <Separator />
 
       <YStack gap="$4">
-        <H2>Quick Actions</H2>
+        <H2>Overview</H2>
         <XStack
           gap="$4"
           flexWrap="wrap"
         >
-          {isAdmin && (
-            <Card
-              padding="$4"
-              flex={1}
-              minWidth={250}
-              hoverStyle={{ backgroundColor: '$backgroundHover' }}
-            >
-              <YStack gap="$2">
-                <Text fontWeight="bold">User Management</Text>
-                <Text
-                  color="$color10"
-                  fontSize="$2"
-                >
-                  Manage users, assign roles, and view user details
-                </Text>
-              </YStack>
-            </Card>
-          )}
-
           <Card
             padding="$4"
             flex={1}
-            minWidth={250}
-            hoverStyle={{ backgroundColor: '$backgroundHover' }}
+            minWidth={200}
           >
             <YStack gap="$2">
-              <Text fontWeight="bold">Analytics</Text>
               <Text
                 color="$color10"
-                fontSize="$2"
+                fontSize="$3"
               >
-                View platform analytics and usage statistics
+                Total Users
+              </Text>
+              <Text
+                fontSize="$8"
+                fontWeight="bold"
+              >
+                --
               </Text>
             </YStack>
           </Card>
@@ -114,38 +96,65 @@ export function AdminScreen() {
           <Card
             padding="$4"
             flex={1}
-            minWidth={250}
-            hoverStyle={{ backgroundColor: '$backgroundHover' }}
+            minWidth={200}
           >
             <YStack gap="$2">
-              <Text fontWeight="bold">Generations</Text>
               <Text
                 color="$color10"
-                fontSize="$2"
+                fontSize="$3"
               >
-                Monitor and manage generation sessions
+                Total Generations
+              </Text>
+              <Text
+                fontSize="$8"
+                fontWeight="bold"
+              >
+                --
               </Text>
             </YStack>
           </Card>
 
-          {isAdmin && (
-            <Card
-              padding="$4"
-              flex={1}
-              minWidth={250}
-              hoverStyle={{ backgroundColor: '$backgroundHover' }}
-            >
-              <YStack gap="$2">
-                <Text fontWeight="bold">Credits Management</Text>
-                <Text
-                  color="$color10"
-                  fontSize="$2"
-                >
-                  Grant credits and manage user balances
-                </Text>
-              </YStack>
-            </Card>
-          )}
+          <Card
+            padding="$4"
+            flex={1}
+            minWidth={200}
+          >
+            <YStack gap="$2">
+              <Text
+                color="$color10"
+                fontSize="$3"
+              >
+                Credits Issued
+              </Text>
+              <Text
+                fontSize="$8"
+                fontWeight="bold"
+              >
+                --
+              </Text>
+            </YStack>
+          </Card>
+
+          <Card
+            padding="$4"
+            flex={1}
+            minWidth={200}
+          >
+            <YStack gap="$2">
+              <Text
+                color="$color10"
+                fontSize="$3"
+              >
+                Active Today
+              </Text>
+              <Text
+                fontSize="$8"
+                fontWeight="bold"
+              >
+                --
+              </Text>
+            </YStack>
+          </Card>
         </XStack>
       </YStack>
     </YStack>

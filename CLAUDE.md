@@ -84,6 +84,13 @@ apps/
     app/
       (auth)/    - Auth route group (login, signup pages)
       admin/     - Admin panel (admin/moderator only)
+        layout.tsx      - Shared admin layout with sidebar
+        page.tsx        - Dashboard page
+        users/          - User management (admin only)
+        analytics/      - Analytics page
+        generations/    - Generations management
+        credits/        - Credits management (admin only)
+        settings/       - Settings page
       api/       - API routes (trpc, auth callback, cron)
       dashboard/ - Protected dashboard page
       not-found.tsx - 404 page
@@ -95,7 +102,15 @@ packages/
     utils/       - Server utilities (rbac.ts)
   app/           - Shared application logic and features
     features/    - Feature-based organization (NOT screens/)
-      admin/     - Admin panel screen
+      admin/     - Admin panel components
+        admin-layout.tsx    - Sidebar + content layout
+        admin-sidebar.tsx   - Navigation sidebar (ShadCN style)
+        admin-dashboard.tsx - Dashboard content
+        admin-users.tsx     - User management
+        admin-analytics.tsx - Analytics view
+        admin-generations.tsx - Generations management
+        admin-credits.tsx   - Credits management
+        admin-settings.tsx  - Settings page
       auth/      - Login, signup, Google OAuth components
       dashboard/ - Dashboard screen
     provider/    - Platform-specific and shared providers

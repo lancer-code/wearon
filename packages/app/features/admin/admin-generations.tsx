@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { YStack, XStack, Text, Card, Image, Button, PageHeader, PageContent, PageFooter } from '@my/ui'
 import { Upload, X, RotateCcw } from '@tamagui/lucide-icons'
+import { trpc } from '../../utils/trpc'
+import { supabase } from '../../utils/supabase'
 
 interface UploadedImage {
   id: string
@@ -23,6 +25,8 @@ export function AdminGenerations() {
   const [error, setError] = useState<string | null>(null)
   const [stitchedImage, setStitchedImage] = useState<string | null>(null)
   const [isStitching, setIsStitching] = useState(false)
+
+  const stitchMutation = trpc.storage.stitch.useMutation()
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -82,12 +86,49 @@ export function AdminGenerations() {
   const handleStitch = async () => {
     if (images.length === 0) return
     setIsStitching(true)
-    // TODO: Call the actual stitch API endpoint
-    // For now, just simulate with a placeholder
-    setTimeout(() => {
-      setStitchedImage(images[0]?.preview || null)
+    setError(null)
+
+    try {
+      // Upload files directly to Supabase Storage
+      const uploadPromises = images.map(async (img) => {
+        const fileName = `admin-upload-${Date.now()}-${img.id}.${img.file.name.split('.').pop()}`
+        const filePath = `uploads/${fileName}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('virtual-tryon-images')
+          .upload(filePath, img.file, {
+            contentType: img.file.type,
+            upsert: true,
+          })
+
+        if (uploadError) {
+          throw new Error(`Failed to upload: ${uploadError.message}`)
+        }
+
+        // Get public URL for the uploaded file
+        const { data: urlData } = supabase.storage
+          .from('virtual-tryon-images')
+          .getPublicUrl(filePath)
+
+        return urlData.publicUrl
+      })
+
+      const imageUrls = await Promise.all(uploadPromises)
+
+      // Call the stitch endpoint with the uploaded image URLs
+      const result = await stitchMutation.mutateAsync({
+        imageUrls,
+        width: 2048,
+        height: 2048,
+      })
+
+      setStitchedImage(result.url)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create collage'
+      setError(message)
+    } finally {
       setIsStitching(false)
-    }, 1000)
+    }
   }
 
   return (

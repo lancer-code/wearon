@@ -1,26 +1,26 @@
 'use client'
 
-import { YStack, H1, Text } from '@my/ui'
+import { YStack, Text, PageHeader, PageContent, PageFooter } from '@my/ui'
 
 export function AdminCredits() {
   return (
-    <YStack
-      flex={1}
-      padding="$6"
-      gap="$4"
-    >
-      <YStack gap="$2">
-        <H1>Credits</H1>
-        <Text color="$color10">Grant credits and manage user balances</Text>
-      </YStack>
+    <YStack flex={1} padding="$6" gap="$4">
+      <PageHeader
+        title="Credits"
+        subtitle="Grant credits and manage user balances"
+      />
 
-      <YStack
-        flex={1}
-        items="center"
-        justify="center"
-      >
-        <Text color="$color10">Credits management coming soon...</Text>
-      </YStack>
+      <PageContent>
+        <YStack flex={1} items="center" justify="center">
+          <Text color="$color10">Credits management coming soon...</Text>
+        </YStack>
+      </PageContent>
+
+      <PageFooter>
+        <Text color="$color8" fontSize="$2">
+          Total credits issued: --
+        </Text>
+      </PageFooter>
     </YStack>
   )
 }

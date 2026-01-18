@@ -1,26 +1,26 @@
 'use client'
 
-import { YStack, H1, Text } from '@my/ui'
+import { YStack, Text, PageHeader, PageContent, PageFooter } from '@my/ui'
 
 export function AdminSettings() {
   return (
-    <YStack
-      flex={1}
-      padding="$6"
-      gap="$4"
-    >
-      <YStack gap="$2">
-        <H1>Settings</H1>
-        <Text color="$color10">Configure admin panel settings</Text>
-      </YStack>
+    <YStack flex={1} padding="$6" gap="$4">
+      <PageHeader
+        title="Settings"
+        subtitle="Configure admin panel settings"
+      />
 
-      <YStack
-        flex={1}
-        items="center"
-        justify="center"
-      >
-        <Text color="$color10">Settings coming soon...</Text>
-      </YStack>
+      <PageContent>
+        <YStack flex={1} items="center" justify="center">
+          <Text color="$color10">Settings coming soon...</Text>
+        </YStack>
+      </PageContent>
+
+      <PageFooter>
+        <Text color="$color8" fontSize="$2">
+          Version: 1.0.0
+        </Text>
+      </PageFooter>
     </YStack>
   )
 }

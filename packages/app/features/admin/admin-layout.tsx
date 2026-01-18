@@ -1,13 +1,16 @@
 'use client'
 
+import { Breadcrumb } from '@my/ui'
+import type { BreadcrumbItem } from '@my/ui'
 import { AdminSidebar } from './admin-sidebar'
 
 interface AdminLayoutProps {
   children: React.ReactNode
   activePath?: string
+  breadcrumbs?: BreadcrumbItem[]
 }
 
-export function AdminLayout({ children, activePath }: AdminLayoutProps) {
+export function AdminLayout({ children, activePath, breadcrumbs }: AdminLayoutProps) {
   return (
     <>
       <style>{`
@@ -39,9 +42,17 @@ export function AdminLayout({ children, activePath }: AdminLayoutProps) {
             overflow: 'auto',
             minWidth: 0,
             backgroundColor: '#0a0a0b',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-          {children}
+          {/* Breadcrumb - full width, outside content padding */}
+          {breadcrumbs && breadcrumbs.length > 0 && <Breadcrumb items={breadcrumbs} />}
+
+          {/* Page Content */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            {children}
+          </div>
         </div>
       </div>
     </>

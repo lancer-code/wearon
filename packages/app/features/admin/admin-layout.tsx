@@ -14,12 +14,23 @@ export function AdminLayout({ children, activePath, breadcrumbs }: AdminLayoutPr
   return (
     <>
       <style>{`
-        .admin-content::-webkit-scrollbar {
-          display: none;
+        .admin-content ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        .admin-content ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .admin-content ::-webkit-scrollbar-thumb {
+          background: #3f3f46;
+          border-radius: 3px;
+        }
+        .admin-content ::-webkit-scrollbar-thumb:hover {
+          background: #52525b;
         }
         .admin-content {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
+          scrollbar-width: thin;
+          scrollbar-color: #3f3f46 transparent;
         }
       `}</style>
       <div
@@ -36,21 +47,26 @@ export function AdminLayout({ children, activePath, breadcrumbs }: AdminLayoutPr
 
         {/* Content Area */}
         <div
-          className="admin-content"
           style={{
             flex: 1,
-            overflow: 'auto',
             minWidth: 0,
             backgroundColor: '#0a0a0b',
             display: 'flex',
             flexDirection: 'column',
           }}
         >
-          {/* Breadcrumb - full width, outside content padding */}
-          {breadcrumbs && breadcrumbs.length > 0 && <Breadcrumb items={breadcrumbs} />}
+          {/* Breadcrumb - sticky at top */}
+          {breadcrumbs && breadcrumbs.length > 0 && (
+            <div style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#0a0a0b' }}>
+              <Breadcrumb items={breadcrumbs} />
+            </div>
+          )}
 
           {/* Page Content */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div
+            className="admin-content"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          >
             {children}
           </div>
         </div>

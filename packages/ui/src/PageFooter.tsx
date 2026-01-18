@@ -9,7 +9,13 @@ export interface PageFooterProps {
 
 export function PageFooter({ children }: PageFooterProps) {
   return (
-    <YStack paddingTop="$4" marginTop="auto" flexShrink={0}>
+    <YStack
+      paddingVertical="$2"
+      flexShrink={0}
+      borderTopWidth={1}
+      borderTopColor="$borderColor"
+      backgroundColor="$background"
+    >
       {children}
     </YStack>
   )

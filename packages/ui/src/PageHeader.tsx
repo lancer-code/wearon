@@ -11,7 +11,7 @@ export interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
   return (
-    <YStack gap="$2" paddingBottom="$4">
+    <YStack gap="$2" paddingBottom="$4" flexShrink={0}>
       <XStack justifyContent="space-between" alignItems="flex-start">
         <YStack gap="$2" flex={1}>
           <H1>{title}</H1>

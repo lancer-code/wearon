@@ -9,7 +9,7 @@ export interface PageContentProps {
 
 export function PageContent({ children }: PageContentProps) {
   return (
-    <YStack flex={1} flexGrow={1} minHeight={0} gap="$4">
+    <YStack flex={1} flexGrow={1} minHeight={0} gap="$4" overflow="auto">
       {children}
     </YStack>
   )

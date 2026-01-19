@@ -238,7 +238,7 @@ function calculateGridPosition(
 
 /**
  * Calculate semantic layout with three sections: Model | Accessories | Outfit
- * Space is redistributed when sections are empty
+ * Compact layout with minimal spacing - images touch edges of their sections
  */
 function calculateSemanticPositions(
   images: Array<{ buffer: Buffer; width: number; height: number; type: 'model' | 'outfit' | 'accessory' }>,
@@ -256,8 +256,9 @@ function calculateSemanticPositions(
 
   if (sectionCount === 0) return []
 
-  const margin = 40
-  const sectionSpacing = 30
+  // Minimal margins for compact layout
+  const margin = 20
+  const sectionSpacing = 15
   const availableWidth = canvasWidth - margin * 2 - sectionSpacing * (sectionCount - 1)
   const sectionWidth = Math.floor(availableWidth / sectionCount)
   const availableHeight = canvasHeight - margin * 2
@@ -265,17 +266,13 @@ function calculateSemanticPositions(
   const composites: Array<{ input: Buffer; top: number; left: number }> = []
 
   let currentX = margin
-  let sectionIndex = 0
 
-  // Model section (single large portrait image)
+  // Model section (single large portrait image) - align to top-left of section
   if (hasModel) {
     const img = modelImages[0]
-    const maxWidth = sectionWidth
-    const maxHeight = availableHeight
-
-    // Center model in its section
-    const left = currentX + Math.floor((maxWidth - img.width) / 2)
-    const top = margin + Math.floor((maxHeight - img.height) / 2)
+    // Align model to top of section, horizontally centered
+    const left = currentX + Math.floor((sectionWidth - img.width) / 2)
+    const top = margin
 
     composites.push({
       input: img.buffer,
@@ -284,31 +281,31 @@ function calculateSemanticPositions(
     })
 
     currentX += sectionWidth + sectionSpacing
-    sectionIndex++
   }
 
-  // Accessories section (2-column grid)
+  // Accessories section (2-column grid) - compact with minimal spacing
   if (hasAccessories) {
     const cols = 2
     const rows = Math.ceil(accessoryImages.length / cols)
-    const itemSpacing = 10
-    const itemWidth = Math.floor((sectionWidth - itemSpacing * (cols - 1)) / cols)
-    const itemHeight = Math.floor((availableHeight - itemSpacing * (rows - 1)) / rows)
+    const itemSpacing = 8  // Minimal spacing between items
 
-    const gridWidth = itemWidth * cols + itemSpacing * (cols - 1)
-    const gridHeight = itemHeight * rows + itemSpacing * (rows - 1)
-    const gridStartX = currentX + Math.floor((sectionWidth - gridWidth) / 2)
-    const gridStartY = margin + Math.floor((availableHeight - gridHeight) / 2)
+    // Calculate grid dimensions based on actual images
+    const gridWidth = sectionWidth
+    const gridHeight = availableHeight
+
+    // Calculate cell size
+    const cellWidth = Math.floor((gridWidth - itemSpacing * (cols - 1)) / cols)
+    const cellHeight = Math.floor((gridHeight - itemSpacing * (rows - 1)) / rows)
 
     accessoryImages.forEach((img, index) => {
       const row = Math.floor(index / cols)
       const col = index % cols
 
-      // Center image within its cell
-      const cellLeft = gridStartX + col * (itemWidth + itemSpacing)
-      const cellTop = gridStartY + row * (itemHeight + itemSpacing)
-      const offsetX = Math.floor((itemWidth - img.width) / 2)
-      const offsetY = Math.floor((itemHeight - img.height) / 2)
+      // Position in grid cell, centered within cell
+      const cellLeft = currentX + col * (cellWidth + itemSpacing)
+      const cellTop = margin + row * (cellHeight + itemSpacing)
+      const offsetX = Math.floor((cellWidth - img.width) / 2)
+      const offsetY = Math.floor((cellHeight - img.height) / 2)
 
       composites.push({
         input: img.buffer,
@@ -318,15 +315,14 @@ function calculateSemanticPositions(
     })
 
     currentX += sectionWidth + sectionSpacing
-    sectionIndex++
   }
 
-  // Outfit section (1-2 images stacked or side by side)
+  // Outfit section - align to top
   if (hasOutfits) {
     if (outfitImages.length === 1) {
       const img = outfitImages[0]
       const left = currentX + Math.floor((sectionWidth - img.width) / 2)
-      const top = margin + Math.floor((availableHeight - img.height) / 2)
+      const top = margin
 
       composites.push({
         input: img.buffer,
@@ -335,12 +331,12 @@ function calculateSemanticPositions(
       })
     } else if (outfitImages.length === 2) {
       // Stack two outfits vertically (top/bottom)
-      const itemSpacing = 10
+      const itemSpacing = 8
       const itemHeight = Math.floor((availableHeight - itemSpacing) / 2)
 
       outfitImages.forEach((img, index) => {
         const left = currentX + Math.floor((sectionWidth - img.width) / 2)
-        const top = margin + index * (itemHeight + itemSpacing) + Math.floor((itemHeight - img.height) / 2)
+        const top = margin + index * (itemHeight + itemSpacing)
 
         composites.push({
           input: img.buffer,
@@ -448,8 +444,10 @@ export async function createCollage(
     const outfitCount = imageBuffers.filter((img) => img.type === 'outfit').length
     const sectionCount = [modelCount > 0, accessoryCount > 0, outfitCount > 0].filter(Boolean).length
 
-    const margin = 40
-    const sectionSpacing = 30
+    // Match values in calculateSemanticPositions
+    const margin = 20
+    const sectionSpacing = 15
+    const itemSpacing = 8
     const availableWidth = canvasWidth - margin * 2 - sectionSpacing * Math.max(0, sectionCount - 1)
     const sectionWidth = sectionCount > 0 ? Math.floor(availableWidth / sectionCount) : canvasWidth - margin * 2
     const availableHeight = canvasHeight - margin * 2
@@ -467,14 +465,12 @@ export async function createCollage(
           // Accessories: fit in 2-column grid
           const cols = 2
           const rows = Math.ceil(accessoryCount / cols)
-          const itemSpacing = 10
           targetWidth = Math.floor((sectionWidth - itemSpacing * (cols - 1)) / cols)
           targetHeight = Math.floor((availableHeight - itemSpacing * (rows - 1)) / rows)
         } else {
           // Outfit: full section width, split height if 2
           targetWidth = sectionWidth
           if (outfitCount === 2) {
-            const itemSpacing = 10
             targetHeight = Math.floor((availableHeight - itemSpacing) / 2)
           } else {
             targetHeight = availableHeight

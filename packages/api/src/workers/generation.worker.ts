@@ -86,6 +86,7 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
 
     // Step 2: Create collage using Sharp with semantic layout
     console.log(`[Worker] Creating collage for session ${sessionId} with ${images.length} images`)
+    console.log(`[Worker] Images for collage:`, JSON.stringify(images.map(img => ({ type: img.type, url: img.url.substring(0, 50) + '...' })), null, 2))
     const collageBuffer = await createCollage(images, {
       width: 2048,
       height: 2048,

@@ -36,11 +36,11 @@ export class GrokAPIError extends Error {
 }
 
 /**
- * Generate an image using Grok API
+ * Generate an image using Grok API with retry logic for transient errors
  *
  * @param options - Generation options
  * @returns Generated image URL
- * @throws GrokAPIError if API call fails
+ * @throws GrokAPIError if API call fails after retries
  */
 export async function generateImage(
   options: GrokGenerationOptions,
@@ -48,62 +48,86 @@ export async function generateImage(
   const { imageUrl, systemPrompt, userPrompt, model = 'grok-2-image' } = options
   const apiKey = getApiKey() // Get API key at runtime
 
-  try {
-    const response = await axios.post(
-      `${GROK_API_BASE_URL}/images/generations`,
-      {
-        model,
-        image: imageUrl, // URL to collage image
-        prompt: userPrompt ? `${systemPrompt}\n\n${userPrompt}` : systemPrompt,
-        n: 1, // Generate only 1 image
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+  const maxRetries = 3
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Grok] Attempt ${attempt}/${maxRetries} - Calling API with model: ${model}`)
+
+      const response = await axios.post(
+        `${GROK_API_BASE_URL}/images/generations`,
+        {
+          model,
+          image: imageUrl, // URL to collage image
+          prompt: userPrompt ? `${systemPrompt}\n\n${userPrompt}` : systemPrompt,
+          n: 1, // Generate only 1 image
         },
-        timeout: 120000, // 2 minute timeout for image generation
-      },
-    )
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 120000, // 2 minute timeout for image generation
+        },
+      )
 
-    // Extract image URL from response
-    // Response format: { data: [{ url: string, ... }] }
-    const generatedImageUrl = response.data.data?.[0]?.url
+      // Extract image URL from response
+      // Response format: { data: [{ url: string, ... }] }
+      const generatedImageUrl = response.data.data?.[0]?.url
 
-    if (!generatedImageUrl) {
-      throw new GrokAPIError('No image URL in Grok API response', response.status, response.data)
-    }
+      if (!generatedImageUrl) {
+        throw new GrokAPIError('No image URL in Grok API response', response.status, response.data)
+      }
 
-    return {
-      imageUrl: generatedImageUrl,
-      model: response.data.model || model,
-      created: response.data.created || Date.now(),
-    }
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError
+      console.log(`[Grok] Success on attempt ${attempt}`)
+      return {
+        imageUrl: generatedImageUrl,
+        model: response.data.model || model,
+        created: response.data.created || Date.now(),
+      }
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError
+        const status = axiosError.response?.status
 
-      // Handle rate limiting (429)
-      if (axiosError.response?.status === 429) {
-        const retryAfter = axiosError.response.headers['retry-after']
+        // Handle rate limiting (429) - let BullMQ handle retries
+        if (status === 429) {
+          const retryAfter = axiosError.response?.headers['retry-after']
+          throw new GrokAPIError(
+            `Rate limit exceeded. Retry after ${retryAfter || 'unknown'} seconds`,
+            429,
+            axiosError.response?.data,
+          )
+        }
+
+        // Retry on 404 (model not found - sometimes transient) and 5xx errors
+        if ((status === 404 || (status && status >= 500)) && attempt < maxRetries) {
+          console.log(`[Grok] Attempt ${attempt} failed with status ${status}, retrying in ${attempt * 2}s...`)
+          lastError = new GrokAPIError(
+            `Grok API request failed: ${axiosError.message}`,
+            status,
+            axiosError.response?.data,
+          )
+          await new Promise((r) => setTimeout(r, attempt * 2000)) // Exponential backoff: 2s, 4s, 6s
+          continue
+        }
+
+        // Handle other HTTP errors
         throw new GrokAPIError(
-          `Rate limit exceeded. Retry after ${retryAfter || 'unknown'} seconds`,
-          429,
-          axiosError.response.data,
+          `Grok API request failed: ${axiosError.message}`,
+          axiosError.response?.status,
+          axiosError.response?.data,
         )
       }
 
-      // Handle other HTTP errors
-      throw new GrokAPIError(
-        `Grok API request failed: ${axiosError.message}`,
-        axiosError.response?.status,
-        axiosError.response?.data,
-      )
+      // Re-throw unknown errors
+      throw error
     }
-
-    // Re-throw unknown errors
-    throw error
   }
+
+  // If we exhausted all retries
+  throw lastError || new GrokAPIError('Grok API request failed after all retries')
 }
 
 /**

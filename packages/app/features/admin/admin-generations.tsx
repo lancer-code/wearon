@@ -122,11 +122,9 @@ export function AdminGenerations() {
 
       const imageUrls = await Promise.all(uploadPromises)
 
-      // Call the stitch endpoint with the uploaded image URLs
+      // Call the stitch endpoint with the uploaded image URLs (uses FHD 1920x1080 default)
       const result = await stitchMutation.mutateAsync({
         imageUrls,
-        width: 2048,
-        height: 2048,
       })
 
       setStitchedImage(result.url)
@@ -224,11 +222,11 @@ export function AdminGenerations() {
               Stitched Image
             </Text>
             {stitchedImage ? (
-              <YStack alignItems="center">
+              <YStack alignItems="center" width="100%">
                 <Image
                   source={{ uri: stitchedImage }}
-                  width={400}
-                  height={400}
+                  width="100%"
+                  height={350}
                   borderRadius="$4"
                   objectFit="contain"
                 />

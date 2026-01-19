@@ -45,8 +45,9 @@ export const storageRouter = router({
     .input(
       z.object({
         imageUrls: z.array(z.string().url()).min(1).max(6),
-        width: z.number().optional().default(2048),
-        height: z.number().optional().default(2048),
+        width: z.number().optional().default(1920),
+        height: z.number().optional().default(1080),
+        layout: z.enum(['grid', 'horizontal']).optional().default('horizontal'),
         expiresIn: z.number().optional().default(3600), // 1 hour default
       }),
     )
@@ -59,6 +60,7 @@ export const storageRouter = router({
       const collageBuffer = await createCollage(images, {
         width: input.width,
         height: input.height,
+        layout: input.layout,
         quality: 95,
       })
 

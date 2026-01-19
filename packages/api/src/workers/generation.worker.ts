@@ -84,12 +84,13 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
 
     await job.updateProgress(20)
 
-    // Step 2: Create collage using Sharp
+    // Step 2: Create collage using Sharp with semantic layout
     console.log(`[Worker] Creating collage for session ${sessionId} with ${images.length} images`)
     const collageBuffer = await createCollage(images, {
       width: 2048,
       height: 2048,
       quality: 95,
+      layout: 'semantic',
     })
 
     await job.updateProgress(40)
@@ -107,12 +108,16 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
       throw new Error(`Failed to upload collage: ${uploadError.message}`)
     }
 
-    // Get public URL for the collage
-    const { data: urlData } = supabase.storage
+    // Get signed URL for the collage (6 hours expiry)
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from('virtual-tryon-images')
-      .getPublicUrl(`stitched/${collageFileName}`)
+      .createSignedUrl(`stitched/${collageFileName}`, 6 * 60 * 60)
 
-    const stitchedImageUrl = urlData.publicUrl
+    if (signedUrlError || !signedUrlData) {
+      throw new Error(`Failed to create signed URL for collage: ${signedUrlError?.message}`)
+    }
+
+    const stitchedImageUrl = signedUrlData.signedUrl
 
     // Update session with stitched image URL
     await supabase
@@ -153,12 +158,21 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
         })
 
       if (!generatedUploadError) {
-        const { data: generatedUrlData } = supabase.storage
+        // Create signed URL (expires in 6 hours to match cleanup schedule)
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
           .from('virtual-tryon-images')
-          .getPublicUrl(`generated/${generatedFileName}`)
+          .createSignedUrl(`generated/${generatedFileName}`, 6 * 60 * 60) // 6 hours
 
-        finalImageUrl = generatedUrlData.publicUrl
-        console.log(`[Worker] Saved generated image to Supabase: ${finalImageUrl}`)
+        if (signedUrlData && !signedUrlError) {
+          finalImageUrl = signedUrlData.signedUrl
+          console.log(`[Worker] Created signed URL for generated image: ${finalImageUrl}`)
+        } else {
+          console.warn(`[Worker] Failed to create signed URL, using public URL`)
+          const { data: publicUrlData } = supabase.storage
+            .from('virtual-tryon-images')
+            .getPublicUrl(`generated/${generatedFileName}`)
+          finalImageUrl = publicUrlData.publicUrl
+        }
       } else {
         console.warn(`[Worker] Failed to save generated image to Supabase, using original URL: ${generatedUploadError.message}`)
       }

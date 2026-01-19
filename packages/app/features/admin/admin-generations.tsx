@@ -3,16 +3,19 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { YStack, XStack, Text, Card, Image, Button, PageHeader, PageContent, PageFooter, Input, useToastController } from '@my/ui'
-import { Upload, X, RotateCcw, User, Watch, Shirt, Sparkles } from '@tamagui/lucide-icons'
+import { Upload, X, RotateCcw, User, Watch, Shirt, Sparkles, Wifi, WifiOff } from '@tamagui/lucide-icons'
 import { trpc } from '../../utils/trpc'
+import { useSupabase } from '../../provider/SupabaseProvider'
+import { supabase } from '../../utils/supabase'
+import type { Tables } from '@my/api/src/types/databaseTypes'
+
+type GenerationSession = Tables<'generation_sessions'>
 
 interface UploadedImage {
   id: string
   file: File
   preview: string
 }
-
-type ImageType = 'model' | 'accessory' | 'outfit'
 
 const ACCEPTED_TYPES = {
   'image/jpeg': ['.jpg', '.jpeg'],
@@ -238,20 +241,109 @@ export function AdminGenerations() {
   const [accessoryImages, setAccessoryImages] = useState<UploadedImage[]>([])
   const [outfitImages, setOutfitImages] = useState<UploadedImage[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [stitchedImage, setStitchedImage] = useState<string | null>(null)
-  const [isStitching, setIsStitching] = useState(false)
 
   // Generation state
   const [userPrompt, setUserPrompt] = useState('')
   const [generatedImage, setGeneratedImage] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStatus, setGenerationStatus] = useState<string | null>(null)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [realtimeStatus, setRealtimeStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 
   const toast = useToastController()
+  useSupabase() // Keep hook for auth state if needed
 
   const adminUploadMutation = trpc.storage.adminUpload.useMutation()
-  const stitchMutation = trpc.storage.stitch.useMutation()
   const generateMutation = trpc.generation.create.useMutation()
+
+  // Establish Realtime connection on page load - subscribe to generation_sessions table
+  useEffect(() => {
+    console.log('[Realtime] Establishing connection to generation_sessions table...')
+    setRealtimeStatus('connecting')
+
+    const channel = supabase
+      .channel('admin-generations-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'generation_sessions',
+        },
+        (payload) => {
+          console.log('[Realtime] Received change from generation_sessions:', payload)
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Connection status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime] Successfully connected to generation_sessions table')
+          setRealtimeStatus('connected')
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.log('[Realtime] Connection failed:', status)
+          setRealtimeStatus('disconnected')
+        } else {
+          setRealtimeStatus('connecting')
+        }
+      })
+
+    return () => {
+      console.log('[Realtime] Cleaning up generation_sessions channel')
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  // Realtime subscription for generation session updates
+  useEffect(() => {
+    if (!currentSessionId) {
+      return
+    }
+
+    console.log('[Realtime] Setting up subscription for session:', currentSessionId)
+
+    const channel = supabase
+      .channel(`generation-${currentSessionId}`)
+      .on<GenerationSession>(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'generation_sessions',
+          filter: `id=eq.${currentSessionId}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Received update:', payload)
+          const session = payload.new as GenerationSession
+
+          if (session.status === 'completed' && session.generated_image_url) {
+            console.log('[Realtime] Generation completed!', session.generated_image_url)
+            setGeneratedImage(session.generated_image_url)
+            setGenerationStatus(null)
+            setIsGenerating(false)
+            setCurrentSessionId(null)
+            toast.show('Generation completed!', { type: 'success' })
+          } else if (session.status === 'failed') {
+            console.log('[Realtime] Generation failed:', session.error_message)
+            setError(session.error_message || 'Generation failed')
+            setGenerationStatus(null)
+            setIsGenerating(false)
+            setCurrentSessionId(null)
+            toast.show(session.error_message || 'Generation failed', { type: 'error' })
+          } else if (session.status === 'processing') {
+            console.log('[Realtime] Generation processing...')
+            setGenerationStatus('Processing...')
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Session subscription status:', status)
+      })
+
+    return () => {
+      console.log('[Realtime] Removing channel for session:', currentSessionId)
+      supabase.removeChannel(channel)
+    }
+  }, [currentSessionId, toast])
 
   const createDropHandler = (
     setImages: React.Dispatch<React.SetStateAction<UploadedImage[]>>
@@ -296,117 +388,111 @@ export function AdminGenerations() {
     setAccessoryImages([])
     setOutfitImages([])
     setError(null)
-    setStitchedImage(null)
-    setIsStitching(false)
     setGeneratedImage(null)
     setIsGenerating(false)
     setGenerationStatus(null)
     setUserPrompt('')
+    setCurrentSessionId(null)
   }
 
   const totalImages = modelImages.length + accessoryImages.length + outfitImages.length
 
-  const handleStitch = async () => {
-    if (totalImages === 0) return
-    setIsStitching(true)
-    setError(null)
-
-    try {
-      // Combine all images with their types
-      const allImages: Array<{ images: UploadedImage[]; type: ImageType }> = [
-        { images: modelImages, type: 'model' },
-        { images: accessoryImages, type: 'accessory' },
-        { images: outfitImages, type: 'outfit' },
-      ]
-
-      // Upload files sequentially to avoid rate limiting
-      const uploadedImages: Array<{ url: string; type: ImageType }> = []
-
-      for (const { images, type } of allImages) {
-        for (const img of images) {
-          const fileName = `admin-upload-${Date.now()}-${img.id}.${img.file.name.split('.').pop()}`
-          const filePath = `uploads/${fileName}`
-          const fileBase64 = await fileToBase64(img.file)
-
-          const result = await adminUploadMutation.mutateAsync({
-            bucket: 'virtual-tryon-images',
-            path: filePath,
-            fileBase64,
-            contentType: img.file.type,
-          })
-
-          uploadedImages.push({ url: result.signedUrl, type })
-        }
-      }
-
-      // Call the stitch endpoint with the uploaded images (uses semantic layout by default)
-      const result = await stitchMutation.mutateAsync({
-        images: uploadedImages,
-      })
-
-      setStitchedImage(result.url)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create collage'
-      setError(message)
-      toast.show(message, { type: 'error' })
-    } finally {
-      setIsStitching(false)
-    }
-  }
-
   const handleGenerate = async () => {
-    if (!stitchedImage || modelImages.length === 0) return
+    if (modelImages.length === 0) return
     setIsGenerating(true)
     setError(null)
-    setGenerationStatus('Starting generation...')
+    setGeneratedImage(null)
+    setGenerationStatus('Uploading images...')
 
     try {
-      // Get model image URL (first uploaded model image)
+      // Upload all individual images
+      const uploadedUrls: { url: string; type: 'model' | 'outfit' | 'accessory' }[] = []
+
+      // Upload model image
       const modelFile = modelImages[0]
       const modelFileName = `model-${Date.now()}-${modelFile.id}.${modelFile.file.name.split('.').pop()}`
-      const modelFilePath = `uploads/${modelFileName}`
-      const modelFileBase64 = await fileToBase64(modelFile.file)
-
       const modelUploadResult = await adminUploadMutation.mutateAsync({
         bucket: 'virtual-tryon-images',
-        path: modelFilePath,
-        fileBase64: modelFileBase64,
+        path: `uploads/${modelFileName}`,
+        fileBase64: await fileToBase64(modelFile.file),
         contentType: modelFile.file.type,
       })
+      uploadedUrls.push({ url: modelUploadResult.signedUrl, type: 'model' })
+
+      // Upload outfit images
+      for (const outfitFile of outfitImages) {
+        const outfitFileName = `outfit-${Date.now()}-${outfitFile.id}.${outfitFile.file.name.split('.').pop()}`
+        const outfitUploadResult = await adminUploadMutation.mutateAsync({
+          bucket: 'virtual-tryon-images',
+          path: `uploads/${outfitFileName}`,
+          fileBase64: await fileToBase64(outfitFile.file),
+          contentType: outfitFile.file.type,
+        })
+        uploadedUrls.push({ url: outfitUploadResult.signedUrl, type: 'outfit' })
+      }
+
+      // Upload accessory images
+      for (const accessoryFile of accessoryImages) {
+        const accessoryFileName = `accessory-${Date.now()}-${accessoryFile.id}.${accessoryFile.file.name.split('.').pop()}`
+        const accessoryUploadResult = await adminUploadMutation.mutateAsync({
+          bucket: 'virtual-tryon-images',
+          path: `uploads/${accessoryFileName}`,
+          fileBase64: await fileToBase64(accessoryFile.file),
+          contentType: accessoryFile.file.type,
+        })
+        uploadedUrls.push({ url: accessoryUploadResult.signedUrl, type: 'accessory' })
+      }
 
       setGenerationStatus('Queuing generation job...')
 
-      // Call generation endpoint
+      // Call generation endpoint with individual images
+      const modelUrl = uploadedUrls.find((img) => img.type === 'model')?.url
+      const outfitUrl = uploadedUrls.find((img) => img.type === 'outfit')?.url
+      const accessories = uploadedUrls
+        .filter((img) => img.type === 'accessory')
+        .map((img, i) => ({ type: `accessory-${i}`, url: img.url }))
+
       const result = await generateMutation.mutateAsync({
-        modelImageUrl: modelUploadResult.signedUrl,
-        outfitImageUrl: outfitImages.length > 0 ? stitchedImage : undefined,
-        accessories: accessoryImages.length > 0 ? accessoryImages.map((img, i) => ({
-          type: `accessory-${i}`,
-          url: stitchedImage!, // Use stitched image which contains all accessories
-        })) : undefined,
+        modelImageUrl: modelUrl!,
+        outfitImageUrl: outfitUrl,
+        accessories: accessories.length > 0 ? accessories : undefined,
         promptUser: userPrompt || undefined,
       })
 
-      setGenerationStatus(`Job queued (Session: ${result.sessionId}). Processing...`)
+      // Set session ID to trigger Realtime subscription
+      setCurrentSessionId(result.sessionId)
+      setGenerationStatus('Processing... Waiting for results via Realtime.')
 
-      // For now, show a placeholder message since generation is async
-      // In production, you'd poll the session status or use Supabase Realtime
-      setGeneratedImage(null)
-      setGenerationStatus('Generation job submitted. Check generation history for results.')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to generate try-on'
       setError(message)
       setGenerationStatus(null)
-      toast.show(message, { type: 'error' })
-    } finally {
       setIsGenerating(false)
+      toast.show(message, { type: 'error' })
     }
   }
 
   return (
     <YStack flex={1} padding="$6" gap="$4">
       <PageContent>
-        <PageHeader title="Generations" subtitle="Upload images for virtual try-on generation" />
+        <XStack justifyContent="space-between" alignItems="flex-start">
+          <PageHeader title="Generations" subtitle="Upload images for virtual try-on generation" />
+          <XStack alignItems="center" gap="$2" paddingTop="$2">
+            <YStack
+              width={10}
+              height={10}
+              borderRadius={5}
+              backgroundColor={
+                realtimeStatus === 'connected' ? '$green10' :
+                realtimeStatus === 'connecting' ? '$yellow10' : '$red10'
+              }
+            />
+            <Text fontSize="$2" color="$color8">
+              {realtimeStatus === 'connected' ? 'Realtime Connected' :
+               realtimeStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
+            </Text>
+          </XStack>
+        </XStack>
         <Card padding="$4" bordered>
           <YStack gap="$4">
             {/* Three Dropzones in a Row */}
@@ -456,23 +542,30 @@ export function AdminGenerations() {
           </YStack>
         </Card>
 
-        {/* Stitched Image Section */}
-        <Card padding="$4" bordered>
-          <YStack gap="$3">
-            <Text fontWeight="600" fontSize="$5">
-              Stitched Image
-            </Text>
-            {stitchedImage ? (
-              <YStack alignItems="center" width="100%">
-                <Image
-                  source={{ uri: stitchedImage }}
-                  width="100%"
-                  height={350}
-                  borderRadius="$4"
-                  objectFit="contain"
-                />
-              </YStack>
-            ) : (
+        {/* Stitched Image Section (shows what worker creates) */}
+        {generationStatus && (
+          <Card padding="$4" bordered>
+            <YStack gap="$3">
+              <XStack alignItems="center" justifyContent="space-between">
+                <Text fontWeight="600" fontSize="$5">
+                  Collage Preview (Worker Output)
+                </Text>
+                <XStack alignItems="center" gap="$2">
+                  <YStack
+                    width={10}
+                    height={10}
+                    borderRadius={5}
+                    backgroundColor={
+                      realtimeStatus === 'connected' ? '$green10' :
+                      realtimeStatus === 'connecting' ? '$yellow10' : '$red10'
+                    }
+                  />
+                  <Text fontSize="$2" color="$color8">
+                    {realtimeStatus === 'connected' ? 'Realtime Connected' :
+                     realtimeStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
+                  </Text>
+                </XStack>
+              </XStack>
               <YStack
                 padding="$6"
                 borderWidth={1}
@@ -481,18 +574,19 @@ export function AdminGenerations() {
                 borderRadius="$4"
                 alignItems="center"
                 justifyContent="center"
-                minHeight={200}
+                minHeight={150}
               >
                 <Text color="$color8" textAlign="center">
-                  {isStitching ? 'Stitching images...' : 'No stitched image yet. Upload images and click "Stitch" to create a collage.'}
+                  The worker creates a semantic collage from your images and sends it to Grok.
+                  {'\n'}Check the database for stitched_image_url after generation.
                 </Text>
               </YStack>
-            )}
-          </YStack>
-        </Card>
+            </YStack>
+          </Card>
+        )}
 
         {/* User Prompt Section */}
-        {stitchedImage && (
+        {modelImages.length > 0 && (
           <Card padding="$4" bordered>
             <YStack gap="$3">
               <Text fontWeight="600" fontSize="$5">
@@ -519,11 +613,30 @@ export function AdminGenerations() {
         {/* Generated Image Section */}
         <Card padding="$4" bordered>
           <YStack gap="$3">
-            <XStack alignItems="center" gap="$2">
-              <Sparkles size={20} color="$color10" />
-              <Text fontWeight="600" fontSize="$5">
-                Generated Try-On
-              </Text>
+            <XStack alignItems="center" justifyContent="space-between">
+              <XStack alignItems="center" gap="$2">
+                <Sparkles size={20} color="$color10" />
+                <Text fontWeight="600" fontSize="$5">
+                  Generated Try-On
+                </Text>
+              </XStack>
+              {isGenerating && (
+                <XStack alignItems="center" gap="$2">
+                  <YStack
+                    width={10}
+                    height={10}
+                    borderRadius={5}
+                    backgroundColor={
+                      realtimeStatus === 'connected' ? '$green10' :
+                      realtimeStatus === 'connecting' ? '$yellow10' : '$red10'
+                    }
+                  />
+                  <Text fontSize="$2" color="$color8">
+                    {realtimeStatus === 'connected' ? 'Live' :
+                     realtimeStatus === 'connecting' ? 'Connecting...' : 'Offline'}
+                  </Text>
+                </XStack>
+              )}
             </XStack>
             {generatedImage ? (
               <YStack alignItems="center" width="100%">
@@ -549,7 +662,7 @@ export function AdminGenerations() {
                 <Text color="$color8" textAlign="center">
                   {isGenerating
                     ? generationStatus || 'Generating...'
-                    : generationStatus || 'No generated image yet. Create a collage and click "Generate Try-On".'}
+                    : 'Upload a model photo and click "Generate Try-On" to create a virtual try-on.'}
                 </Text>
               </YStack>
             )}
@@ -563,23 +676,13 @@ export function AdminGenerations() {
             {totalImages} image{totalImages !== 1 ? 's' : ''} selected
           </Text>
           <XStack gap="$3">
-            {(totalImages > 0 || stitchedImage || generatedImage) && (
+            {(totalImages > 0 || generatedImage) && (
               <Button size="$3" variant="outlined" onPress={handleReset}>
                 <RotateCcw size={16} />
                 Reset
               </Button>
             )}
-            {totalImages > 0 && (
-              <Button
-                size="$3"
-                theme="alt1"
-                onPress={handleStitch}
-                disabled={isStitching}
-              >
-                {isStitching ? 'Stitching...' : 'Stitch'}
-              </Button>
-            )}
-            {stitchedImage && modelImages.length > 0 && (
+            {modelImages.length > 0 && (
               <Button
                 size="$3"
                 theme="active"

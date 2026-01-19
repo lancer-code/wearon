@@ -19,7 +19,7 @@ export interface CollageOptions {
   height?: number
   quality?: number
   background?: { r: number; g: number; b: number }
-  layout?: 'grid' | 'horizontal' // grid = square collage, horizontal = side by side
+  layout?: 'grid' | 'horizontal' | 'semantic' // grid = square collage, horizontal = side by side, semantic = model/accessories/outfit sections
 }
 
 const DEFAULT_OPTIONS: Required<CollageOptions> = {
@@ -237,6 +237,124 @@ function calculateGridPosition(
 }
 
 /**
+ * Calculate semantic layout with three sections: Model | Accessories | Outfit
+ * Space is redistributed when sections are empty
+ */
+function calculateSemanticPositions(
+  images: Array<{ buffer: Buffer; width: number; height: number; type: 'model' | 'outfit' | 'accessory' }>,
+  canvasWidth: number,
+  canvasHeight: number,
+): Array<{ input: Buffer; top: number; left: number }> {
+  const modelImages = images.filter((img) => img.type === 'model')
+  const accessoryImages = images.filter((img) => img.type === 'accessory')
+  const outfitImages = images.filter((img) => img.type === 'outfit')
+
+  const hasModel = modelImages.length > 0
+  const hasAccessories = accessoryImages.length > 0
+  const hasOutfits = outfitImages.length > 0
+  const sectionCount = [hasModel, hasAccessories, hasOutfits].filter(Boolean).length
+
+  if (sectionCount === 0) return []
+
+  const margin = 40
+  const sectionSpacing = 30
+  const availableWidth = canvasWidth - margin * 2 - sectionSpacing * (sectionCount - 1)
+  const sectionWidth = Math.floor(availableWidth / sectionCount)
+  const availableHeight = canvasHeight - margin * 2
+
+  const composites: Array<{ input: Buffer; top: number; left: number }> = []
+
+  let currentX = margin
+  let sectionIndex = 0
+
+  // Model section (single large portrait image)
+  if (hasModel) {
+    const img = modelImages[0]
+    const maxWidth = sectionWidth
+    const maxHeight = availableHeight
+
+    // Center model in its section
+    const left = currentX + Math.floor((maxWidth - img.width) / 2)
+    const top = margin + Math.floor((maxHeight - img.height) / 2)
+
+    composites.push({
+      input: img.buffer,
+      top: Math.max(margin, top),
+      left: Math.max(currentX, left),
+    })
+
+    currentX += sectionWidth + sectionSpacing
+    sectionIndex++
+  }
+
+  // Accessories section (2-column grid)
+  if (hasAccessories) {
+    const cols = 2
+    const rows = Math.ceil(accessoryImages.length / cols)
+    const itemSpacing = 10
+    const itemWidth = Math.floor((sectionWidth - itemSpacing * (cols - 1)) / cols)
+    const itemHeight = Math.floor((availableHeight - itemSpacing * (rows - 1)) / rows)
+
+    const gridWidth = itemWidth * cols + itemSpacing * (cols - 1)
+    const gridHeight = itemHeight * rows + itemSpacing * (rows - 1)
+    const gridStartX = currentX + Math.floor((sectionWidth - gridWidth) / 2)
+    const gridStartY = margin + Math.floor((availableHeight - gridHeight) / 2)
+
+    accessoryImages.forEach((img, index) => {
+      const row = Math.floor(index / cols)
+      const col = index % cols
+
+      // Center image within its cell
+      const cellLeft = gridStartX + col * (itemWidth + itemSpacing)
+      const cellTop = gridStartY + row * (itemHeight + itemSpacing)
+      const offsetX = Math.floor((itemWidth - img.width) / 2)
+      const offsetY = Math.floor((itemHeight - img.height) / 2)
+
+      composites.push({
+        input: img.buffer,
+        top: Math.max(margin, cellTop + offsetY),
+        left: Math.max(currentX, cellLeft + offsetX),
+      })
+    })
+
+    currentX += sectionWidth + sectionSpacing
+    sectionIndex++
+  }
+
+  // Outfit section (1-2 images stacked or side by side)
+  if (hasOutfits) {
+    if (outfitImages.length === 1) {
+      const img = outfitImages[0]
+      const left = currentX + Math.floor((sectionWidth - img.width) / 2)
+      const top = margin + Math.floor((availableHeight - img.height) / 2)
+
+      composites.push({
+        input: img.buffer,
+        top: Math.max(margin, top),
+        left: Math.max(currentX, left),
+      })
+    } else if (outfitImages.length === 2) {
+      // Stack two outfits vertically (top/bottom)
+      const itemSpacing = 10
+      const itemHeight = Math.floor((availableHeight - itemSpacing) / 2)
+
+      outfitImages.forEach((img, index) => {
+        const left = currentX + Math.floor((sectionWidth - img.width) / 2)
+        const top = margin + index * (itemHeight + itemSpacing) + Math.floor((itemHeight - img.height) / 2)
+
+        composites.push({
+          input: img.buffer,
+          top: Math.max(margin, top),
+          left: Math.max(currentX, left),
+        })
+      })
+    }
+  }
+
+  return composites
+}
+
+/**
  * Creates a collage from multiple images
  * Downloads images from URLs, resizes them, and stitches into a single image
  *
@@ -274,7 +392,13 @@ export async function createCollage(
   let canvasWidth = opts.width
   let canvasHeight = opts.height
 
-  if (opts.layout === 'horizontal') {
+  if (opts.layout === 'semantic') {
+    // Semantic layout: Model | Accessories | Outfit sections
+    // Each image type is resized separately based on its role
+    // We'll use a placeholder here and resize per-type below
+    maxImageWidth = opts.width
+    maxImageHeight = opts.height
+  } else if (opts.layout === 'horizontal') {
     // Horizontal layout: all images side by side
     // For horizontal, we want images to be reasonably sized, so we calculate
     // canvas width based on image count rather than squeezing into fixed width
@@ -309,32 +433,99 @@ export async function createCollage(
   }
 
   // Resize all images with EXIF orientation and alpha handling
-  const resizedImages = await Promise.all(
-    imageBuffers.map(async (img) => {
-      const resized = await resizeImage(img.buffer, maxImageWidth, maxImageHeight, opts.background)
-      const metadata = await sharp(resized).metadata()
-      return {
-        ...img,
-        buffer: resized,
-        width: metadata.width || maxImageWidth,
-        height: metadata.height || maxImageHeight,
-      }
-    }),
-  )
+  let resizedImages: Array<{
+    url: string
+    type: 'model' | 'outfit' | 'accessory'
+    buffer: Buffer
+    width: number
+    height: number
+  }>
+
+  if (opts.layout === 'semantic') {
+    // For semantic layout, resize each type separately based on its section
+    const modelCount = imageBuffers.filter((img) => img.type === 'model').length
+    const accessoryCount = imageBuffers.filter((img) => img.type === 'accessory').length
+    const outfitCount = imageBuffers.filter((img) => img.type === 'outfit').length
+    const sectionCount = [modelCount > 0, accessoryCount > 0, outfitCount > 0].filter(Boolean).length
+
+    const margin = 40
+    const sectionSpacing = 30
+    const availableWidth = canvasWidth - margin * 2 - sectionSpacing * Math.max(0, sectionCount - 1)
+    const sectionWidth = sectionCount > 0 ? Math.floor(availableWidth / sectionCount) : canvasWidth - margin * 2
+    const availableHeight = canvasHeight - margin * 2
+
+    resizedImages = await Promise.all(
+      imageBuffers.map(async (img) => {
+        let targetWidth: number
+        let targetHeight: number
+
+        if (img.type === 'model') {
+          // Model: full section size
+          targetWidth = sectionWidth
+          targetHeight = availableHeight
+        } else if (img.type === 'accessory') {
+          // Accessories: fit in 2-column grid
+          const cols = 2
+          const rows = Math.ceil(accessoryCount / cols)
+          const itemSpacing = 10
+          targetWidth = Math.floor((sectionWidth - itemSpacing * (cols - 1)) / cols)
+          targetHeight = Math.floor((availableHeight - itemSpacing * (rows - 1)) / rows)
+        } else {
+          // Outfit: full section width, split height if 2
+          targetWidth = sectionWidth
+          if (outfitCount === 2) {
+            const itemSpacing = 10
+            targetHeight = Math.floor((availableHeight - itemSpacing) / 2)
+          } else {
+            targetHeight = availableHeight
+          }
+        }
+
+        const resized = await resizeImage(img.buffer, targetWidth, targetHeight, opts.background)
+        const metadata = await sharp(resized).metadata()
+        return {
+          ...img,
+          buffer: resized,
+          width: metadata.width || targetWidth,
+          height: metadata.height || targetHeight,
+        }
+      }),
+    )
+  } else {
+    resizedImages = await Promise.all(
+      imageBuffers.map(async (img) => {
+        const resized = await resizeImage(img.buffer, maxImageWidth, maxImageHeight, opts.background)
+        const metadata = await sharp(resized).metadata()
+        return {
+          ...img,
+          buffer: resized,
+          width: metadata.width || maxImageWidth,
+          height: metadata.height || maxImageHeight,
+        }
+      }),
+    )
+  }
 
   // Calculate positions for each image based on layout
-  const composites = resizedImages.map((img, index) => {
-    const position =
-      opts.layout === 'horizontal'
-        ? calculateHorizontalPosition(index, imageCount, canvasWidth, canvasHeight, img.width, img.height, maxImageWidth)
-        : calculateGridPosition(index, imageCount, canvasWidth, canvasHeight, img.width, img.height)
+  let composites: Array<{ input: Buffer; top: number; left: number }>
 
-    return {
-      input: img.buffer,
-      top: position.top,
-      left: position.left,
-    }
-  })
+  if (opts.layout === 'semantic') {
+    // Semantic layout uses its own positioning logic
+    composites = calculateSemanticPositions(resizedImages, canvasWidth, canvasHeight)
+  } else {
+    composites = resizedImages.map((img, index) => {
+      const position =
+        opts.layout === 'horizontal'
+          ? calculateHorizontalPosition(index, imageCount, canvasWidth, canvasHeight, img.width, img.height, maxImageWidth)
+          : calculateGridPosition(index, imageCount, canvasWidth, canvasHeight, img.width, img.height)
+
+      return {
+        input: img.buffer,
+        top: position.top,
+        left: position.left,
+      }
+    })
+  }
 
   // Create the collage
   const collage = await sharp({

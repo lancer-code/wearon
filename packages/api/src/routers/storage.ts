@@ -44,18 +44,18 @@ export const storageRouter = router({
   stitch: adminProcedure
     .input(
       z.object({
-        imageUrls: z.array(z.string().url()).min(1).max(10),
+        images: z.array(z.object({
+          url: z.string().url(),
+          type: z.enum(['model', 'outfit', 'accessory']),
+        })).min(1).max(10),
         width: z.number().optional().default(1920),
         height: z.number().optional().default(1080),
-        layout: z.enum(['grid', 'horizontal']).optional().default('horizontal'),
+        layout: z.enum(['grid', 'horizontal', 'semantic']).optional().default('semantic'),
         expiresIn: z.number().optional().default(3600), // 1 hour default
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      const images = input.imageUrls.map((url, index) => ({
-        url,
-        type: (index === 0 ? 'model' : 'outfit') as 'model' | 'outfit' | 'accessory',
-      }))
+      const images = input.images
 
       const collageBuffer = await createCollage(images, {
         width: input.width,

@@ -150,3 +150,106 @@ export async function cleanupOldSessions(): Promise<number> {
 
   return data?.length || 0
 }
+
+// Stuck job timeout in minutes
+const STUCK_JOB_TIMEOUT_MINUTES = 10
+
+export interface StuckJobRecoveryResult {
+  recoveredCount: number
+  refundedCount: number
+  errors: Array<{ sessionId: string; error: string }>
+}
+
+/**
+ * Recover stuck jobs that have been processing for too long
+ * - Find sessions in 'processing' or 'pending' status for more than 10 minutes
+ * - Mark them as failed and refund credits
+ */
+export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
+  const result: StuckJobRecoveryResult = {
+    recoveredCount: 0,
+    refundedCount: 0,
+    errors: [],
+  }
+
+  const cutoffTime = new Date(Date.now() - STUCK_JOB_TIMEOUT_MINUTES * 60 * 1000)
+
+  try {
+    // Find stuck sessions (processing or pending for too long)
+    const { data: stuckSessions, error: fetchError } = await supabase
+      .from('generation_sessions')
+      .select('id, user_id, status, created_at')
+      .in('status', ['processing', 'pending'])
+      .lt('created_at', cutoffTime.toISOString())
+
+    if (fetchError) {
+      result.errors.push({ sessionId: 'fetch', error: fetchError.message })
+      return result
+    }
+
+    if (!stuckSessions || stuckSessions.length === 0) {
+      return result
+    }
+
+    console.log(`[StuckJobRecovery] Found ${stuckSessions.length} stuck sessions`)
+
+    // Process each stuck session
+    for (const session of stuckSessions) {
+      try {
+        // Refund credits
+        const { error: refundError } = await supabase.rpc('refund_credits', {
+          p_user_id: session.user_id,
+          p_amount: 1,
+          p_description: `Stuck job recovery: session ${session.id} timed out after ${STUCK_JOB_TIMEOUT_MINUTES} minutes`,
+        })
+
+        if (refundError) {
+          result.errors.push({ sessionId: session.id, error: `Refund failed: ${refundError.message}` })
+        } else {
+          result.refundedCount++
+        }
+
+        // Mark session as failed
+        const { error: updateError } = await supabase
+          .from('generation_sessions')
+          .update({
+            status: 'failed',
+            error_message: `Job timed out after ${STUCK_JOB_TIMEOUT_MINUTES} minutes - credits refunded`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', session.id)
+
+        if (updateError) {
+          result.errors.push({ sessionId: session.id, error: `Update failed: ${updateError.message}` })
+        } else {
+          result.recoveredCount++
+        }
+
+        // Log analytics event
+        await supabase.from('analytics_events').insert({
+          event_type: 'stuck_job_recovered',
+          user_id: session.user_id,
+          metadata: {
+            session_id: session.id,
+            original_status: session.status,
+            stuck_duration_minutes: Math.round((Date.now() - new Date(session.created_at).getTime()) / 60000),
+          },
+        })
+      } catch (sessionError) {
+        result.errors.push({
+          sessionId: session.id,
+          error: sessionError instanceof Error ? sessionError.message : 'Unknown error',
+        })
+      }
+    }
+
+    console.log(`[StuckJobRecovery] Recovered ${result.recoveredCount} sessions, refunded ${result.refundedCount} credits`)
+    return result
+  } catch (error) {
+    result.errors.push({
+      sessionId: 'general',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+    return result
+  }
+}

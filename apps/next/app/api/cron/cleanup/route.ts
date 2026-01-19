@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cleanupExpiredFiles, cleanupOldSessions } from '../../../../../../../packages/api/src/services/storage-cleanup'
+import { cleanupExpiredFiles, cleanupOldSessions, recoverStuckJobs } from '../../../../../../../packages/api/src/services/storage-cleanup'
 
 /**
  * Vercel Cron Job: Cleanup expired files from Supabase Storage
@@ -46,6 +46,9 @@ export async function GET(request: NextRequest) {
     // Clean up old session URLs in database
     const sessionsUpdated = await cleanupOldSessions()
 
+    // Recover stuck jobs (processing/pending for more than 10 minutes)
+    const stuckJobsResult = await recoverStuckJobs()
+
     const duration = Date.now() - startTime
 
     return NextResponse.json({
@@ -61,8 +64,13 @@ export async function GET(request: NextRequest) {
         sessions: {
           updated: sessionsUpdated,
         },
+        stuckJobs: {
+          recovered: stuckJobsResult.recoveredCount,
+          refunded: stuckJobsResult.refundedCount,
+          errors: stuckJobsResult.errors.length,
+        },
       },
-      errors: fileCleanupResult.errors,
+      errors: [...fileCleanupResult.errors, ...stuckJobsResult.errors.map(e => ({ file: e.sessionId, error: e.error }))],
     })
   } catch (error) {
     console.error('[Cron] Cleanup failed:', error)

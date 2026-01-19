@@ -1,11 +1,15 @@
-import { Worker, Job } from 'bullmq'
+import { Worker, Job, Queue } from 'bullmq'
 import { createClient } from '@supabase/supabase-js'
 import IORedis from 'ioredis'
 import dotenv from 'dotenv'
 import { resolve } from 'path'
+import axios from 'axios'
 import type { GenerationJobData } from '../services/queue'
 import { createCollage, type ImageInput } from '../services/image-processor'
 import { generateImage, GrokAPIError } from '../services/grok'
+
+// Max retries configured in queue (must match queue.ts)
+const MAX_JOB_ATTEMPTS = 3
 
 // Load environment variables from apps/next/.env.local
 const envPath = resolve(process.cwd(), '../../apps/next/.env.local')
@@ -23,8 +27,28 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 // Redis connection for Upstash (with full auth URL)
-const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-  maxRetriesPerRequest: null,
+const redisUrl = process.env.REDIS_URL
+if (!redisUrl) {
+  throw new Error('REDIS_URL environment variable is not set')
+}
+
+// Check if using Upstash (requires TLS and specific settings)
+const isUpstash = redisUrl.includes('upstash.io')
+
+const redisConnection = new IORedis(redisUrl, {
+  maxRetriesPerRequest: null, // Required for BullMQ
+  enableReadyCheck: false, // Upstash doesn't support INFO command
+  tls: isUpstash ? {} : undefined, // Upstash requires TLS
+})
+
+redisConnection.on('error', (err) => {
+  if (!err.message.includes('ECONNRESET')) {
+    console.error('[Worker] Redis error:', err.message)
+  }
+})
+
+redisConnection.on('connect', () => {
+  console.log('[Worker] Redis connected')
 })
 
 /**
@@ -108,14 +132,48 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
 
     await job.updateProgress(90)
 
-    // Step 5: Update session with generated image URL
+    // Step 5: Download generated image and re-upload to Supabase (prevent URL expiration)
+    console.log(`[Worker] Downloading generated image for session ${sessionId}`)
+    let finalImageUrl = grokResponse.imageUrl
+
+    try {
+      const imageResponse = await axios.get(grokResponse.imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 60000, // 1 minute timeout for download
+      })
+
+      const imageBuffer = Buffer.from(imageResponse.data)
+      const generatedFileName = `${sessionId}-generated.jpg`
+
+      const { error: generatedUploadError } = await supabase.storage
+        .from('virtual-tryon-images')
+        .upload(`generated/${generatedFileName}`, imageBuffer, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        })
+
+      if (!generatedUploadError) {
+        const { data: generatedUrlData } = supabase.storage
+          .from('virtual-tryon-images')
+          .getPublicUrl(`generated/${generatedFileName}`)
+
+        finalImageUrl = generatedUrlData.publicUrl
+        console.log(`[Worker] Saved generated image to Supabase: ${finalImageUrl}`)
+      } else {
+        console.warn(`[Worker] Failed to save generated image to Supabase, using original URL: ${generatedUploadError.message}`)
+      }
+    } catch (downloadError) {
+      console.warn(`[Worker] Failed to download generated image, using original URL:`, downloadError)
+    }
+
+    // Step 6: Update session with generated image URL
     const processingTime = Date.now() - startTime
 
     await supabase
       .from('generation_sessions')
       .update({
         status: 'completed',
-        generated_image_url: grokResponse.imageUrl,
+        generated_image_url: finalImageUrl,
         processing_time_ms: processingTime,
         completed_at: new Date().toISOString(),
       })
@@ -150,39 +208,71 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
 
     if (isRateLimitError) {
       // Don't mark as failed yet, let BullMQ retry
+      // Update session to show it's retrying
+      try {
+        await supabase
+          .from('generation_sessions')
+          .update({ error_message: `Rate limited, retrying (attempt ${job.attemptsMade + 1}/${MAX_JOB_ATTEMPTS})` })
+          .eq('id', sessionId)
+      } catch (updateError) {
+        console.error(`[Worker] Failed to update session status for retry:`, updateError)
+      }
       throw error
     }
 
-    // Refund credits on failure
-    await supabase.rpc('refund_credits', {
-      p_user_id: userId,
-      p_amount: 1,
-      p_description: `Generation failed: ${errorMessage}`,
-    })
+    // For non-rate-limit errors, mark as failed immediately and refund
+    // Wrap all Supabase calls in try-catch to prevent silent failures
+    try {
+      // Refund credits on failure (only if not already refunded)
+      const { data: session } = await supabase
+        .from('generation_sessions')
+        .select('status')
+        .eq('id', sessionId)
+        .single()
 
-    // Update session status to failed
-    await supabase
-      .from('generation_sessions')
-      .update({
-        status: 'failed',
-        error_message: errorMessage,
-        processing_time_ms: processingTime,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', sessionId)
+      // Only refund if session wasn't already marked as failed (idempotency)
+      if (session && session.status !== 'failed') {
+        await supabase.rpc('refund_credits', {
+          p_user_id: userId,
+          p_amount: 1,
+          p_description: `Generation failed: ${errorMessage}`,
+        })
+      }
+    } catch (refundError) {
+      console.error(`[Worker] Failed to refund credits for session ${sessionId}:`, refundError)
+    }
 
-    // Log analytics event
-    await supabase
-      .from('analytics_events')
-      .insert({
-        event_type: 'generation_failed',
-        user_id: userId,
-        metadata: {
-          session_id: sessionId,
-          error: errorMessage,
+    try {
+      // Update session status to failed
+      await supabase
+        .from('generation_sessions')
+        .update({
+          status: 'failed',
+          error_message: errorMessage,
           processing_time_ms: processingTime,
-        },
-      })
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId)
+    } catch (updateError) {
+      console.error(`[Worker] Failed to update session status to failed:`, updateError)
+    }
+
+    try {
+      // Log analytics event
+      await supabase
+        .from('analytics_events')
+        .insert({
+          event_type: 'generation_failed',
+          user_id: userId,
+          metadata: {
+            session_id: sessionId,
+            error: errorMessage,
+            processing_time_ms: processingTime,
+          },
+        })
+    } catch (analyticsError) {
+      console.error(`[Worker] Failed to log analytics event:`, analyticsError)
+    }
 
     throw error
   }
@@ -207,8 +297,86 @@ generationWorker.on('completed', (job) => {
   console.log(`[Worker] Job ${job.id} completed successfully`)
 })
 
-generationWorker.on('failed', (job, err) => {
+generationWorker.on('failed', async (job, err) => {
   console.error(`[Worker] Job ${job?.id} failed:`, err.message)
+
+  // Check if this was the final attempt (all retries exhausted)
+  if (job && job.attemptsMade >= MAX_JOB_ATTEMPTS) {
+    console.log(`[Worker] Job ${job.id} exhausted all ${MAX_JOB_ATTEMPTS} attempts, processing final failure`)
+
+    const { sessionId, userId } = job.data
+    const errorMessage = err.message || 'Unknown error after all retries'
+
+    try {
+      // Check if already refunded (idempotency)
+      const { data: session } = await supabase
+        .from('generation_sessions')
+        .select('status')
+        .eq('id', sessionId)
+        .single()
+
+      if (session && session.status !== 'failed') {
+        // Refund credits
+        await supabase.rpc('refund_credits', {
+          p_user_id: userId,
+          p_amount: 1,
+          p_description: `Generation failed after ${MAX_JOB_ATTEMPTS} attempts: ${errorMessage}`,
+        })
+
+        // Update session status
+        await supabase
+          .from('generation_sessions')
+          .update({
+            status: 'failed',
+            error_message: `Failed after ${MAX_JOB_ATTEMPTS} attempts: ${errorMessage}`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId)
+
+        // Log analytics
+        await supabase.from('analytics_events').insert({
+          event_type: 'generation_failed',
+          user_id: userId,
+          metadata: {
+            session_id: sessionId,
+            error: errorMessage,
+            attempts: job.attemptsMade,
+            final_failure: true,
+          },
+        })
+
+        console.log(`[Worker] Refunded credits and marked session ${sessionId} as failed`)
+      }
+    } catch (refundError) {
+      console.error(`[Worker] Failed to process final failure for job ${job.id}:`, refundError)
+    }
+  }
+})
+
+generationWorker.on('stalled', async (jobId) => {
+  console.warn(`[Worker] Job ${jobId} stalled - attempting recovery`)
+
+  try {
+    // Create queue instance to get job data
+    const queue = new Queue<GenerationJobData>('image-generation', {
+      connection: redisConnection as any,
+    })
+
+    const job = await queue.getJob(jobId)
+
+    if (job) {
+      const { sessionId } = job.data
+      // Update session to show it's being retried
+      await supabase
+        .from('generation_sessions')
+        .update({ error_message: 'Job stalled, retrying...' })
+        .eq('id', sessionId)
+    }
+
+    await queue.close()
+  } catch (stalledError) {
+    console.error(`[Worker] Failed to handle stalled job ${jobId}:`, stalledError)
+  }
 })
 
 generationWorker.on('error', (err) => {

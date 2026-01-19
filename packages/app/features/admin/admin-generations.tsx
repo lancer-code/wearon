@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { YStack, XStack, Text, Card, Image, Button, PageHeader, PageContent, PageFooter, Input } from '@my/ui'
+import { YStack, XStack, Text, Card, Image, Button, PageHeader, PageContent, PageFooter, Input, useToastController } from '@my/ui'
 import { Upload, X, RotateCcw, User, Watch, Shirt, Sparkles } from '@tamagui/lucide-icons'
 import { trpc } from '../../utils/trpc'
 
@@ -247,6 +247,8 @@ export function AdminGenerations() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStatus, setGenerationStatus] = useState<string | null>(null)
 
+  const toast = useToastController()
+
   const adminUploadMutation = trpc.storage.adminUpload.useMutation()
   const stitchMutation = trpc.storage.stitch.useMutation()
   const generateMutation = trpc.generation.create.useMutation()
@@ -346,6 +348,7 @@ export function AdminGenerations() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create collage'
       setError(message)
+      toast.show(message, { type: 'error' })
     } finally {
       setIsStitching(false)
     }
@@ -394,6 +397,7 @@ export function AdminGenerations() {
       const message = err instanceof Error ? err.message : 'Failed to generate try-on'
       setError(message)
       setGenerationStatus(null)
+      toast.show(message, { type: 'error' })
     } finally {
       setIsGenerating(false)
     }

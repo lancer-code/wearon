@@ -1,10 +1,5 @@
-import { Queue, Worker, Job, QueueEvents } from 'bullmq'
+import { Queue, Job, QueueEvents, Worker } from 'bullmq'
 import IORedis from 'ioredis'
-
-// Redis connection for Upstash (with full auth URL)
-const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-  maxRetriesPerRequest: null,
-})
 
 // Job data interface
 export interface GenerationJobData {
@@ -17,36 +12,110 @@ export interface GenerationJobData {
   promptUser?: string
 }
 
-// Queue configuration
-export const generationQueue = new Queue<GenerationJobData>('image-generation', {
-  connection: redisConnection as any, // Type assertion due to BullMQ bundled ioredis version mismatch
-  defaultJobOptions: {
-    attempts: 3, // Retry failed jobs up to 3 times
-    backoff: {
-      type: 'exponential',
-      delay: 2000, // Start with 2 second delay
-    },
-    removeOnComplete: {
-      count: 100, // Keep last 100 completed jobs
-      age: 24 * 3600, // Keep completed jobs for 24 hours
-    },
-    removeOnFail: {
-      count: 500, // Keep last 500 failed jobs for debugging
-      age: 7 * 24 * 3600, // Keep failed jobs for 7 days
-    },
-  },
-})
+// Lazy-initialized Redis connection and queue (only connect when needed)
+let redisConnection: IORedis | null = null
+let generationQueue: Queue<GenerationJobData> | null = null
+let generationQueueEvents: QueueEvents | null = null
 
-// Queue events for monitoring
-export const generationQueueEvents = new QueueEvents('image-generation', {
-  connection: redisConnection as any,
-})
+function getRedisConnection(): IORedis {
+  // Check if existing connection is closed or errored
+  if (redisConnection && redisConnection.status !== 'ready' && redisConnection.status !== 'connecting') {
+    // Connection is in a bad state, recreate it
+    try {
+      redisConnection.disconnect()
+    } catch {
+      // Ignore disconnect errors
+    }
+    redisConnection = null
+    generationQueue = null // Queue needs to be recreated with new connection
+    generationQueueEvents = null
+  }
+
+  if (!redisConnection) {
+    const redisUrl = process.env.REDIS_URL
+    if (!redisUrl) {
+      throw new Error('REDIS_URL environment variable is not set')
+    }
+
+    // Parse the URL to check if it's Upstash (requires TLS)
+    const isUpstash = redisUrl.includes('upstash.io')
+
+    redisConnection = new IORedis(redisUrl, {
+      maxRetriesPerRequest: null, // Required for BullMQ
+      enableReadyCheck: false, // Upstash doesn't support INFO command
+      tls: isUpstash ? {} : undefined, // Upstash requires TLS
+      retryStrategy: (times) => {
+        if (times > 10) {
+          console.error('[Queue] Redis max retries reached, giving up')
+          return null // Stop retrying
+        }
+        // Exponential backoff: 100ms, 200ms, 400ms... up to 3s
+        return Math.min(times * 100, 3000)
+      },
+    })
+
+    // Only log once on first connect
+    let hasLoggedConnect = false
+    redisConnection.on('error', (err) => {
+      // Only log non-ECONNRESET errors (those are expected during reconnect)
+      if (!err.message.includes('ECONNRESET')) {
+        console.error('[Queue] Redis connection error:', err.message)
+      }
+    })
+
+    redisConnection.on('connect', () => {
+      if (!hasLoggedConnect) {
+        console.log('[Queue] Redis connected')
+        hasLoggedConnect = true
+      }
+    })
+
+    redisConnection.on('reconnecting', () => {
+      hasLoggedConnect = false // Allow logging on next successful connect
+    })
+  }
+  return redisConnection
+}
+
+function getQueue(): Queue<GenerationJobData> {
+  if (!generationQueue) {
+    generationQueue = new Queue<GenerationJobData>('image-generation', {
+      connection: getRedisConnection() as any,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+        removeOnComplete: {
+          count: 100,
+          age: 24 * 3600,
+        },
+        removeOnFail: {
+          count: 500,
+          age: 7 * 24 * 3600,
+        },
+      },
+    })
+  }
+  return generationQueue
+}
+
+function getQueueEvents(): QueueEvents {
+  if (!generationQueueEvents) {
+    generationQueueEvents = new QueueEvents('image-generation', {
+      connection: getRedisConnection() as any,
+    })
+  }
+  return generationQueueEvents
+}
 
 /**
  * Add a new generation job to the queue
  */
 export async function addGenerationJob(data: GenerationJobData): Promise<string> {
-  const job = await generationQueue.add('generate-image', data, {
+  const queue = getQueue()
+  const job = await queue.add('generate-image', data, {
     jobId: data.sessionId, // Use session ID as job ID for idempotency
   })
 
@@ -57,7 +126,8 @@ export async function addGenerationJob(data: GenerationJobData): Promise<string>
  * Get job status by session ID
  */
 export async function getJobStatus(sessionId: string) {
-  const job = await generationQueue.getJob(sessionId)
+  const queue = getQueue()
+  const job = await queue.getJob(sessionId)
 
   if (!job) {
     return { status: 'not_found', progress: 0 }
@@ -79,7 +149,8 @@ export async function getJobStatus(sessionId: string) {
  * Cancel a job
  */
 export async function cancelJob(sessionId: string): Promise<boolean> {
-  const job = await generationQueue.getJob(sessionId)
+  const queue = getQueue()
+  const job = await queue.getJob(sessionId)
 
   if (!job) {
     return false
@@ -93,12 +164,13 @@ export async function cancelJob(sessionId: string): Promise<boolean> {
  * Get queue metrics
  */
 export async function getQueueMetrics() {
+  const queue = getQueue()
   const [waiting, active, completed, failed, delayed] = await Promise.all([
-    generationQueue.getWaitingCount(),
-    generationQueue.getActiveCount(),
-    generationQueue.getCompletedCount(),
-    generationQueue.getFailedCount(),
-    generationQueue.getDelayedCount(),
+    queue.getWaitingCount(),
+    queue.getActiveCount(),
+    queue.getCompletedCount(),
+    queue.getFailedCount(),
+    queue.getDelayedCount(),
   ])
 
   return {
@@ -115,18 +187,26 @@ export async function getQueueMetrics() {
  * Clean up old jobs
  */
 export async function cleanOldJobs() {
+  const queue = getQueue()
   const grace = 24 * 3600 * 1000 // 24 hours in milliseconds
 
-  await generationQueue.clean(grace, 1000, 'completed')
-  await generationQueue.clean(7 * 24 * 3600 * 1000, 1000, 'failed')
+  await queue.clean(grace, 1000, 'completed')
+  await queue.clean(7 * 24 * 3600 * 1000, 1000, 'failed')
 }
 
 /**
  * Graceful shutdown
  */
 export async function closeQueue() {
-  await generationQueue.close()
-  await generationQueueEvents.close()
+  if (generationQueue) {
+    await generationQueue.close()
+  }
+  if (generationQueueEvents) {
+    await generationQueueEvents.close()
+  }
+  if (redisConnection) {
+    await redisConnection.quit()
+  }
 }
 
 // Export types

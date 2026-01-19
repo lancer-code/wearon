@@ -66,14 +66,19 @@ export const generationRouter = router({
       }
 
       // Deduct 1 credit
-      const { data: deductResult } = await ctx.supabase.rpc('deduct_credits', {
+      const { data: deductResult, error: deductError } = await ctx.supabase.rpc('deduct_credits', {
         p_user_id: userId,
         p_amount: 1,
         p_description: 'Virtual try-on generation',
       })
 
-      if (!deductResult) {
-        throw new Error('Failed to deduct credits. Please try again.')
+      if (deductError) {
+        console.error('Credit deduction error:', deductError)
+        throw new Error(`Failed to deduct credits: ${deductError.message}`)
+      }
+
+      if (deductResult === false) {
+        throw new Error('Insufficient credits. You need at least 1 credit to generate an image.')
       }
 
       // Create generation session record

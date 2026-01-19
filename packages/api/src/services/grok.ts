@@ -110,15 +110,13 @@ export async function generateImage(
  * Check if Grok API is configured and accessible
  */
 export async function checkGrokAPIHealth(): Promise<boolean> {
-  if (!GROK_API_KEY) {
-    return false
-  }
-
   try {
+    const apiKey = getApiKey()
+
     // Try a simple API call to verify connectivity
     await axios.get(`${GROK_API_BASE_URL}/models`, {
       headers: {
-        Authorization: `Bearer ${GROK_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       timeout: 5000,
     })

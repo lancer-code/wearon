@@ -44,7 +44,7 @@ export const storageRouter = router({
   stitch: adminProcedure
     .input(
       z.object({
-        imageUrls: z.array(z.string().url()).min(1).max(6),
+        imageUrls: z.array(z.string().url()).min(1).max(10),
         width: z.number().optional().default(1920),
         height: z.number().optional().default(1080),
         layout: z.enum(['grid', 'horizontal']).optional().default('horizontal'),

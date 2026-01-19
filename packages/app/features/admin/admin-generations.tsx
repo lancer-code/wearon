@@ -12,7 +12,7 @@ interface UploadedImage {
   preview: string
 }
 
-const MAX_IMAGES = 5
+const MAX_IMAGES = 10
 const ACCEPTED_TYPES = {
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/png': ['.png'],
@@ -104,8 +104,9 @@ export function AdminGenerations() {
     setError(null)
 
     try {
-      // Upload files via tRPC (uses service role key to bypass RLS)
-      const uploadPromises = images.map(async (img) => {
+      // Upload files sequentially to avoid rate limiting
+      const imageUrls: string[] = []
+      for (const img of images) {
         const fileName = `admin-upload-${Date.now()}-${img.id}.${img.file.name.split('.').pop()}`
         const filePath = `uploads/${fileName}`
         const fileBase64 = await fileToBase64(img.file)
@@ -117,10 +118,8 @@ export function AdminGenerations() {
           contentType: img.file.type,
         })
 
-        return result.signedUrl
-      })
-
-      const imageUrls = await Promise.all(uploadPromises)
+        imageUrls.push(result.signedUrl)
+      }
 
       // Call the stitch endpoint with the uploaded image URLs (uses FHD 1920x1080 default)
       const result = await stitchMutation.mutateAsync({

@@ -252,8 +252,8 @@ export async function createCollage(
     throw new Error('At least one image is required to create a collage')
   }
 
-  if (images.length > 6) {
-    throw new Error('Maximum 6 images allowed in a collage')
+  if (images.length > 10) {
+    throw new Error('Maximum 10 images allowed in a collage')
   }
 
   const opts = { ...DEFAULT_OPTIONS, ...options }

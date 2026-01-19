@@ -3,7 +3,28 @@ import { router, protectedProcedure } from '../trpc'
 import { addGenerationJob, getJobStatus } from '../services/queue'
 
 // Default system prompt for virtual try-on
-const DEFAULT_SYSTEM_PROMPT = `You are a professional virtual fashion stylist AI. Generate a photorealistic image showing the person wearing the outfit and accessories provided in the collage. Maintain the person's appearance, body proportions, and facial features. Ensure the clothing fits naturally and realistically. The final image should look professional, high-quality, and indistinguishable from a real photograph.`
+const DEFAULT_SYSTEM_PROMPT = `You are a professional virtual fashion stylist AI specializing in virtual try-on.
+
+INPUT IMAGE LAYOUT:
+The input collage is divided into three sections from left to right:
+- LEFT SECTION: The model/person photo (full body or portrait)
+- CENTER SECTION: Accessories (watches, jewelry, hats, bags, etc.) arranged in a grid
+- RIGHT SECTION: Outfit items (clothing like shirts, pants, dresses, etc.)
+
+YOUR TASK:
+Generate a single photorealistic image showing ONLY the model/person from the left section wearing ALL the outfit items from the right section and ALL the accessories from the center section.
+
+REQUIREMENTS:
+1. Output only the model wearing everything - do NOT include the original collage layout
+2. Generate a PORTRAIT orientation image (taller than wide, approximately 3:4 or 2:3 aspect ratio)
+3. Maintain the person's exact appearance, face, body proportions, skin tone, and hair
+4. Fit all clothing naturally on the model's body with realistic draping and fit
+5. Place all accessories appropriately (watch on wrist, necklace on neck, hat on head, etc.)
+6. Preserve realistic lighting, shadows, and fabric textures
+7. The final image should look like a professional fashion photograph, indistinguishable from a real photo
+8. Keep the same pose as the original model photo unless clothing requires adjustment
+
+Generate a photorealistic image showing the person wearing the outfit and accessories provided in the collage. Maintain the person's appearance, body proportions, and facial features. Ensure the clothing fits naturally and realistically. The final image should look professional, high-quality, and indistinguishable from a real photograph.`
 
 export const generationRouter = router({
   create: protectedProcedure

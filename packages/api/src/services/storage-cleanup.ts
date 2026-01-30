@@ -16,7 +16,6 @@ export interface CleanupResult {
   deletedCount: number
   folders: {
     userUploads: number
-    stitched: number
     generated: number
   }
   errors: Array<{ file: string; error: string }>
@@ -97,7 +96,6 @@ export async function cleanupExpiredFiles(): Promise<CleanupResult> {
     deletedCount: 0,
     folders: {
       userUploads: 0,
-      stitched: 0,
       generated: 0,
     },
     errors: [],
@@ -108,12 +106,6 @@ export async function cleanupExpiredFiles(): Promise<CleanupResult> {
   result.folders.userUploads = userUploadsResult.deletedCount
   result.deletedCount += userUploadsResult.deletedCount
   result.errors.push(...userUploadsResult.errors)
-
-  // Clean up stitched folder (collages)
-  const stitchedResult = await cleanupFolder('stitched', EXPIRY_HOURS)
-  result.folders.stitched = stitchedResult.deletedCount
-  result.deletedCount += stitchedResult.deletedCount
-  result.errors.push(...stitchedResult.errors)
 
   // Clean up generated folder (AI-generated images)
   const generatedResult = await cleanupFolder('generated', EXPIRY_HOURS)
@@ -136,7 +128,6 @@ export async function cleanupOldSessions(): Promise<number> {
     .update({
       model_image_url: 'expired',
       outfit_image_url: 'expired',
-      stitched_image_url: 'expired',
       generated_image_url: 'expired',
     })
     .lt('created_at', cutoffTime.toISOString())

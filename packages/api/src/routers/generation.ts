@@ -3,21 +3,19 @@ import { router, protectedProcedure } from '../trpc'
 import { addGenerationJob, getJobStatus } from '../services/queue'
 
 // Default system prompt for virtual try-on with OpenAI GPT Image 1.5
-const DEFAULT_SYSTEM_PROMPT = `This is a 3-column virtual try-on reference collage:
-- LEFT: Model (person to dress)
-- CENTER: Accessories (jewelry, watches, hats, etc.)
-- RIGHT: Outfit/clothes
+const DEFAULT_SYSTEM_PROMPT = `Virtual try-on: Using the provided images:
+- First image: Model (person to dress)
+- Second image (if provided): Outfit/clothes
+- Additional images (if provided): Accessories
 
-Generate a single portrait photo of the person from the LEFT column wearing:
-1. The outfit from the RIGHT column
-2. All accessories from the CENTER column
+Generate a single portrait photo of the model wearing all provided items.
 
 Requirements:
 - Preserve the model's exact face, skin tone, hair, body
 - Natural clothing fit with realistic draping
 - Place accessories correctly (watch→wrist, necklace→neck, hat→head)
 - Professional fashion photography, natural lighting
-- Output ONE portrait (3:4 ratio), NOT a collage`
+- Output ONE portrait (3:4 ratio)`
 
 export const generationRouter = router({
   create: protectedProcedure

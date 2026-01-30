@@ -249,7 +249,6 @@ export function AdminGenerations() {
   // Generation state
   const [userPrompt, setUserPrompt] = useState('')
   const [generatedImage, setGeneratedImage] = useState<string | null>(null)
-  const [stitchedImage, setStitchedImage] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStatus, setGenerationStatus] = useState<string | null>(null)
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -320,12 +319,6 @@ export function AdminGenerations() {
           console.log('[Realtime] Received update:', payload)
           const session = payload.new as GenerationSession
 
-          // Capture stitched image URL when available
-          if (session.stitched_image_url) {
-            console.log('[Realtime] Stitched image ready:', session.stitched_image_url)
-            setStitchedImage(session.stitched_image_url)
-          }
-
           if (session.status === 'completed' && session.generated_image_url) {
             console.log('[Realtime] Generation completed!', session.generated_image_url)
             setGeneratedImage(session.generated_image_url)
@@ -342,7 +335,7 @@ export function AdminGenerations() {
             toast.show(session.error_message || 'Generation failed', { type: 'error' })
           } else if (session.status === 'processing') {
             console.log('[Realtime] Generation processing...')
-            setGenerationStatus('Processing with Grok AI...')
+            setGenerationStatus('Processing with OpenAI...')
           }
         }
       )
@@ -400,7 +393,6 @@ export function AdminGenerations() {
     setOutfitImages([])
     setError(null)
     setGeneratedImage(null)
-    setStitchedImage(null)
     setIsGenerating(false)
     setGenerationStatus(null)
     setUserPrompt('')
@@ -414,7 +406,6 @@ export function AdminGenerations() {
     setIsGenerating(true)
     setError(null)
     setGeneratedImage(null)
-    setStitchedImage(null)
     setGenerationStatus('Preparing uploads...')
 
     try {
@@ -550,61 +541,6 @@ export function AdminGenerations() {
             )}
           </YStack>
         </Card>
-
-        {/* Stitched Collage Preview - shows when generating or has stitched image */}
-        {(generationStatus || stitchedImage) && (
-          <Card padding="$4" bordered>
-            <YStack gap="$3">
-              <XStack alignItems="center" justifyContent="space-between">
-                <Text fontWeight="600" fontSize="$5">
-                  Stitched Collage
-                </Text>
-                {isGenerating && (
-                  <XStack alignItems="center" gap="$2">
-                    <YStack
-                      width={10}
-                      height={10}
-                      borderRadius={5}
-                      backgroundColor={
-                        realtimeStatus === 'connected' ? '$green10' :
-                        realtimeStatus === 'connecting' ? '$yellow10' : '$red10'
-                      }
-                    />
-                    <Text fontSize="$2" color="$color8">
-                      {generationStatus || 'Processing...'}
-                    </Text>
-                  </XStack>
-                )}
-              </XStack>
-              {stitchedImage ? (
-                <YStack alignItems="center" width="100%">
-                  <Image
-                    source={{ uri: stitchedImage }}
-                    width="100%"
-                    height={400}
-                    borderRadius="$4"
-                    objectFit="contain"
-                  />
-                </YStack>
-              ) : (
-                <YStack
-                  padding="$6"
-                  borderWidth={1}
-                  borderStyle="dashed"
-                  borderColor="$borderColor"
-                  borderRadius="$4"
-                  alignItems="center"
-                  justifyContent="center"
-                  minHeight={150}
-                >
-                  <Text color="$color8" textAlign="center">
-                    {generationStatus || 'Creating collage...'}
-                  </Text>
-                </YStack>
-              )}
-            </YStack>
-          </Card>
-        )}
 
         {/* User Prompt Section */}
         {modelImages.length > 0 && (

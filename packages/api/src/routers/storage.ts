@@ -3,6 +3,58 @@ import { router, protectedProcedure, adminProcedure } from '../trpc'
 import { createCollage } from '../services/image-processor'
 
 export const storageRouter = router({
+  // Get presigned upload URLs for direct client-to-storage upload
+  // This is the recommended approach - bypasses backend for file upload
+  getUploadUrls: adminProcedure
+    .input(
+      z.object({
+        files: z.array(
+          z.object({
+            fileName: z.string(),
+            contentType: z.string(),
+            type: z.enum(['model', 'outfit', 'accessory']),
+          })
+        ).min(1).max(10),
+        bucket: z.string().default('virtual-tryon-images'),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const results = await Promise.all(
+        input.files.map(async (file) => {
+          const path = `uploads/${file.type}-${Date.now()}-${crypto.randomUUID()}.${file.fileName.split('.').pop()}`
+
+          // Create signed upload URL (valid for 1 hour)
+          const { data, error } = await ctx.adminSupabase.storage
+            .from(input.bucket)
+            .createSignedUploadUrl(path)
+
+          if (error) {
+            throw new Error(`Failed to create upload URL for ${file.fileName}: ${error.message}`)
+          }
+
+          // Also create a signed download URL for after upload (valid for 6 hours)
+          const { data: downloadData, error: downloadError } = await ctx.adminSupabase.storage
+            .from(input.bucket)
+            .createSignedUrl(path, 6 * 60 * 60) // 6 hours
+
+          if (downloadError) {
+            throw new Error(`Failed to create download URL for ${file.fileName}: ${downloadError.message}`)
+          }
+
+          return {
+            fileName: file.fileName,
+            type: file.type,
+            path,
+            uploadUrl: data.signedUrl,
+            token: data.token,
+            downloadUrl: downloadData.signedUrl,
+          }
+        })
+      )
+
+      return { uploads: results }
+    }),
+
   // Admin upload - uses service role key to bypass RLS
   adminUpload: adminProcedure
     .input(

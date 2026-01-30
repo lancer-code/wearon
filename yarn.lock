@@ -7149,6 +7149,7 @@ __metadata:
     "@types/sharp": "npm:^0.32.0"
     bullmq: "npm:^5.66.4"
     dotenv: "npm:^17.2.3"
+    form-data: "npm:^4.0.5"
     ioredis: "npm:^5.9.0"
     sharp: "npm:^0.34.5"
     superjson: "npm:^2.2.2"
@@ -10528,7 +10529,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"form-data@npm:^4.0.4":
+"form-data@npm:^4.0.4, form-data@npm:^4.0.5":
   version: 4.0.5
   resolution: "form-data@npm:4.0.5"
   dependencies:

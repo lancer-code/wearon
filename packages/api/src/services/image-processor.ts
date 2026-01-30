@@ -135,14 +135,16 @@ async function resizeImage(
   maxWidth: number,
   maxHeight: number,
   background: { r: number; g: number; b: number } = { r: 255, g: 255, b: 255 },
+  mode: 'inside' | 'cover' = 'inside',
 ): Promise<Buffer> {
   return sharp(imageBuffer, { limitInputPixels: MAX_INPUT_PIXELS })
     .rotate() // Auto-rotate based on EXIF orientation
     .flatten({ background }) // Handle alpha channel (PNG transparency)
     .toColorspace('srgb') // Ensure consistent RGB output (handles CMYK)
     .resize(maxWidth, maxHeight, {
-      fit: 'inside',
-      withoutEnlargement: true,
+      fit: mode,
+      withoutEnlargement: mode === 'inside', // Allow enlargement for cover mode
+      position: 'center', // Center crop for cover mode
     })
     .toBuffer()
 }
@@ -237,8 +239,8 @@ function calculateGridPosition(
 }
 
 /**
- * Calculate semantic layout with three sections: Model | Accessories | Outfit
- * Compact layout with minimal spacing - images touch edges of their sections
+ * Calculate semantic layout with three clear columns: MODEL | ACCESSORIES | OUTFIT
+ * Images are centered within their allocated cells
  */
 function calculateSemanticPositions(
   images: Array<{ buffer: Buffer; width: number; height: number; type: 'model' | 'outfit' | 'accessory' }>,
@@ -252,99 +254,72 @@ function calculateSemanticPositions(
   const hasModel = modelImages.length > 0
   const hasAccessories = accessoryImages.length > 0
   const hasOutfits = outfitImages.length > 0
-  const sectionCount = [hasModel, hasAccessories, hasOutfits].filter(Boolean).length
 
-  if (sectionCount === 0) return []
-
-  // Minimal margins for compact layout
-  const margin = 20
-  const sectionSpacing = 15
-  const availableWidth = canvasWidth - margin * 2 - sectionSpacing * (sectionCount - 1)
-  const sectionWidth = Math.floor(availableWidth / sectionCount)
-  const availableHeight = canvasHeight - margin * 2
+  if (!hasModel && !hasAccessories && !hasOutfits) return []
 
   const composites: Array<{ input: Buffer; top: number; left: number }> = []
 
-  let currentX = margin
+  // Fixed 3-column layout - each column is exactly 1/3 of canvas
+  const columnWidth = Math.floor(canvasWidth / 3)
+  const gap = 2
 
-  // Model section (single large portrait image) - align to top-left of section
+  // MODEL COLUMN (left) - centered in column 0
   if (hasModel) {
     const img = modelImages[0]
-    // Align model to top of section, horizontally centered
-    const left = currentX + Math.floor((sectionWidth - img.width) / 2)
-    const top = margin
-
+    const offsetX = Math.floor((columnWidth - img.width) / 2)
+    const offsetY = Math.floor((canvasHeight - img.height) / 2)
     composites.push({
       input: img.buffer,
-      top: Math.max(margin, top),
-      left: Math.max(currentX, left),
+      top: Math.max(0, offsetY),
+      left: Math.max(0, offsetX),
     })
-
-    currentX += sectionWidth + sectionSpacing
   }
 
-  // Accessories section (2-column grid) - compact with minimal spacing
+  // ACCESSORIES COLUMN (center) - 2xN grid in column 1, centered in cells
   if (hasAccessories) {
     const cols = 2
     const rows = Math.ceil(accessoryImages.length / cols)
-    const itemSpacing = 8  // Minimal spacing between items
-
-    // Calculate grid dimensions based on actual images
-    const gridWidth = sectionWidth
-    const gridHeight = availableHeight
-
-    // Calculate cell size
-    const cellWidth = Math.floor((gridWidth - itemSpacing * (cols - 1)) / cols)
-    const cellHeight = Math.floor((gridHeight - itemSpacing * (rows - 1)) / rows)
+    const cellWidth = Math.floor((columnWidth - gap * (cols - 1)) / cols)
+    const cellHeight = Math.floor((canvasHeight - gap * (rows - 1)) / rows)
 
     accessoryImages.forEach((img, index) => {
       const row = Math.floor(index / cols)
       const col = index % cols
 
-      // Position in grid cell, centered within cell
-      const cellLeft = currentX + col * (cellWidth + itemSpacing)
-      const cellTop = margin + row * (cellHeight + itemSpacing)
+      const cellLeft = columnWidth + col * (cellWidth + gap)
+      const cellTop = row * (cellHeight + gap)
+
+      // Center image within its cell
       const offsetX = Math.floor((cellWidth - img.width) / 2)
       const offsetY = Math.floor((cellHeight - img.height) / 2)
 
       composites.push({
         input: img.buffer,
-        top: Math.max(margin, cellTop + offsetY),
-        left: Math.max(currentX, cellLeft + offsetX),
+        top: cellTop + Math.max(0, offsetY),
+        left: cellLeft + Math.max(0, offsetX),
       })
     })
-
-    currentX += sectionWidth + sectionSpacing
   }
 
-  // Outfit section - align to top
+  // OUTFIT COLUMN (right) - stacked in column 2, centered in cells
   if (hasOutfits) {
-    if (outfitImages.length === 1) {
-      const img = outfitImages[0]
-      const left = currentX + Math.floor((sectionWidth - img.width) / 2)
-      const top = margin
+    const itemCount = outfitImages.length
+    const cellHeight = Math.floor((canvasHeight - gap * (itemCount - 1)) / itemCount)
+
+    outfitImages.forEach((img, index) => {
+      const cellTop = index * (cellHeight + gap)
+      const cellLeft = columnWidth * 2
+
+      // Center image within its cell
+      const offsetX = Math.floor((columnWidth - img.width) / 2)
+      const offsetY = Math.floor((cellHeight - img.height) / 2)
 
       composites.push({
         input: img.buffer,
-        top: Math.max(margin, top),
-        left: Math.max(currentX, left),
+        top: cellTop + Math.max(0, offsetY),
+        left: cellLeft + Math.max(0, offsetX),
       })
-    } else if (outfitImages.length === 2) {
-      // Stack two outfits vertically (top/bottom)
-      const itemSpacing = 8
-      const itemHeight = Math.floor((availableHeight - itemSpacing) / 2)
-
-      outfitImages.forEach((img, index) => {
-        const left = currentX + Math.floor((sectionWidth - img.width) / 2)
-        const top = margin + index * (itemHeight + itemSpacing)
-
-        composites.push({
-          input: img.buffer,
-          top: Math.max(margin, top),
-          left: Math.max(currentX, left),
-        })
-      })
-    }
+    })
   }
 
   return composites
@@ -438,19 +413,14 @@ export async function createCollage(
   }>
 
   if (opts.layout === 'semantic') {
-    // For semantic layout, resize each type separately based on its section
-    const modelCount = imageBuffers.filter((img) => img.type === 'model').length
+    // For semantic layout: fixed 3-column layout (MODEL | ACCESSORIES | OUTFIT)
+    // Images fill their columns edge-to-edge
     const accessoryCount = imageBuffers.filter((img) => img.type === 'accessory').length
     const outfitCount = imageBuffers.filter((img) => img.type === 'outfit').length
-    const sectionCount = [modelCount > 0, accessoryCount > 0, outfitCount > 0].filter(Boolean).length
 
-    // Match values in calculateSemanticPositions
-    const margin = 20
-    const sectionSpacing = 15
-    const itemSpacing = 8
-    const availableWidth = canvasWidth - margin * 2 - sectionSpacing * Math.max(0, sectionCount - 1)
-    const sectionWidth = sectionCount > 0 ? Math.floor(availableWidth / sectionCount) : canvasWidth - margin * 2
-    const availableHeight = canvasHeight - margin * 2
+    // Match values in calculateSemanticPositions - no dividers, columns touch
+    const columnWidth = Math.floor(canvasWidth / 3)
+    const gap = 2
 
     resizedImages = await Promise.all(
       imageBuffers.map(async (img) => {
@@ -458,26 +428,27 @@ export async function createCollage(
         let targetHeight: number
 
         if (img.type === 'model') {
-          // Model: full section size
-          targetWidth = sectionWidth
-          targetHeight = availableHeight
+          // Model: fill entire column
+          targetWidth = columnWidth
+          targetHeight = canvasHeight
         } else if (img.type === 'accessory') {
-          // Accessories: fit in 2-column grid
+          // Accessories: 2-column grid, fill cells completely
           const cols = 2
           const rows = Math.ceil(accessoryCount / cols)
-          targetWidth = Math.floor((sectionWidth - itemSpacing * (cols - 1)) / cols)
-          targetHeight = Math.floor((availableHeight - itemSpacing * (rows - 1)) / rows)
+          targetWidth = Math.floor((columnWidth - gap * (cols - 1)) / cols)
+          targetHeight = Math.floor((canvasHeight - gap * (rows - 1)) / rows)
         } else {
-          // Outfit: full section width, split height if 2
-          targetWidth = sectionWidth
-          if (outfitCount === 2) {
-            targetHeight = Math.floor((availableHeight - itemSpacing) / 2)
+          // Outfit: fill column, split height if multiple
+          targetWidth = columnWidth
+          if (outfitCount > 1) {
+            targetHeight = Math.floor((canvasHeight - gap * (outfitCount - 1)) / outfitCount)
           } else {
-            targetHeight = availableHeight
+            targetHeight = canvasHeight
           }
         }
 
-        const resized = await resizeImage(img.buffer, targetWidth, targetHeight, opts.background)
+        // Use 'inside' mode to fit the full image without cropping (may have padding)
+        const resized = await resizeImage(img.buffer, targetWidth, targetHeight, opts.background, 'inside')
         const metadata = await sharp(resized).metadata()
         return {
           ...img,

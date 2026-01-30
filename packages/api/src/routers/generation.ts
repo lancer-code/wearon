@@ -2,20 +2,22 @@ import { z } from 'zod'
 import { router, protectedProcedure } from '../trpc'
 import { addGenerationJob, getJobStatus } from '../services/queue'
 
-// Default system prompt for virtual try-on (max 1024 chars for Grok API)
-const DEFAULT_SYSTEM_PROMPT = `Virtual try-on: Generate a photorealistic image of the person wearing the provided outfit and accessories.
+// Default system prompt for virtual try-on with OpenAI GPT Image 1.5
+const DEFAULT_SYSTEM_PROMPT = `This is a 3-column virtual try-on reference collage:
+- LEFT: Model (person to dress)
+- CENTER: Accessories (jewelry, watches, hats, etc.)
+- RIGHT: Outfit/clothes
 
-INPUT: Collage with LEFT=model photo, CENTER=accessories, RIGHT=outfit items.
+Generate a single portrait photo of the person from the LEFT column wearing:
+1. The outfit from the RIGHT column
+2. All accessories from the CENTER column
 
-OUTPUT: Single portrait photo of the model wearing ALL items. Requirements:
-- Maintain exact appearance (face, body, skin tone, hair)
+Requirements:
+- Preserve the model's exact face, skin tone, hair, body
 - Natural clothing fit with realistic draping
-- Place accessories correctly (watch on wrist, necklace on neck, etc.)
-- Realistic lighting and shadows
-- Professional fashion photo quality
-- Portrait orientation (3:4 ratio)
-
-Do NOT output the collage - only the dressed model.`
+- Place accessories correctly (watch→wrist, necklace→neck, hat→head)
+- Professional fashion photography, natural lighting
+- Output ONE portrait (3:4 ratio), NOT a collage`
 
 export const generationRouter = router({
   create: protectedProcedure
@@ -28,11 +30,11 @@ export const generationRouter = router({
             z.object({
               type: z.string(),
               url: z.string().url(),
-            }),
+            })
           )
           .optional(),
         promptUser: z.string().max(500).optional(),
-      }),
+      })
     )
     .mutation(async ({ input, ctx }) => {
       if (!ctx.user) {
@@ -149,7 +151,7 @@ export const generationRouter = router({
     .input(
       z.object({
         sessionId: z.string().uuid(),
-      }),
+      })
     )
     .query(async ({ input, ctx }) => {
       if (!ctx.user) {
@@ -185,7 +187,7 @@ export const generationRouter = router({
         limit: z.number().int().min(1).max(50).default(20),
         offset: z.number().int().min(0).default(0),
         status: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
-      }),
+      })
     )
     .query(async ({ input, ctx }) => {
       if (!ctx.user) {

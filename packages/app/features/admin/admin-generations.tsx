@@ -23,19 +23,23 @@ const ACCEPTED_TYPES = {
   'image/webp': ['.webp'],
 }
 
-// Helper to convert File to base64
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => {
-      const result = reader.result as string
-      // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
-      const base64 = result.split(',')[1]
-      resolve(base64 || '')
-    }
-    reader.onerror = reject
+// Upload file directly to Supabase using presigned URL
+const uploadToPresignedUrl = async (
+  file: File,
+  uploadUrl: string,
+  token: string
+): Promise<void> => {
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type,
+    },
+    body: file,
   })
+
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.statusText}`)
+  }
 }
 
 interface DropzoneProps {
@@ -254,7 +258,7 @@ export function AdminGenerations() {
   const toast = useToastController()
   useSupabase() // Keep hook for auth state if needed
 
-  const adminUploadMutation = trpc.storage.adminUpload.useMutation()
+  const getUploadUrlsMutation = trpc.storage.getUploadUrls.useMutation()
   const generateMutation = trpc.generation.create.useMutation()
 
   // Establish Realtime connection on page load - subscribe to generation_sessions table
@@ -411,60 +415,56 @@ export function AdminGenerations() {
     setError(null)
     setGeneratedImage(null)
     setStitchedImage(null)
-    setGenerationStatus('Uploading images...')
+    setGenerationStatus('Preparing uploads...')
 
     try {
-      // Upload all individual images
-      const uploadedUrls: { url: string; type: 'model' | 'outfit' | 'accessory' }[] = []
+      // Prepare all files for upload
+      const filesToUpload: { file: File; type: 'model' | 'outfit' | 'accessory' }[] = []
 
-      // Upload model image
-      const modelFile = modelImages[0]
-      const modelFileName = `model-${Date.now()}-${modelFile.id}.${modelFile.file.name.split('.').pop()}`
-      const modelUploadResult = await adminUploadMutation.mutateAsync({
-        bucket: 'virtual-tryon-images',
-        path: `uploads/${modelFileName}`,
-        fileBase64: await fileToBase64(modelFile.file),
-        contentType: modelFile.file.type,
+      // Add model image
+      filesToUpload.push({ file: modelImages[0].file, type: 'model' })
+
+      // Add outfit images
+      outfitImages.forEach((img) => {
+        filesToUpload.push({ file: img.file, type: 'outfit' })
       })
-      uploadedUrls.push({ url: modelUploadResult.signedUrl, type: 'model' })
 
-      // Upload outfit images
-      for (const outfitFile of outfitImages) {
-        const outfitFileName = `outfit-${Date.now()}-${outfitFile.id}.${outfitFile.file.name.split('.').pop()}`
-        const outfitUploadResult = await adminUploadMutation.mutateAsync({
-          bucket: 'virtual-tryon-images',
-          path: `uploads/${outfitFileName}`,
-          fileBase64: await fileToBase64(outfitFile.file),
-          contentType: outfitFile.file.type,
-        })
-        uploadedUrls.push({ url: outfitUploadResult.signedUrl, type: 'outfit' })
-      }
+      // Add accessory images
+      accessoryImages.forEach((img) => {
+        filesToUpload.push({ file: img.file, type: 'accessory' })
+      })
 
-      // Upload accessory images
-      for (const accessoryFile of accessoryImages) {
-        const accessoryFileName = `accessory-${Date.now()}-${accessoryFile.id}.${accessoryFile.file.name.split('.').pop()}`
-        const accessoryUploadResult = await adminUploadMutation.mutateAsync({
-          bucket: 'virtual-tryon-images',
-          path: `uploads/${accessoryFileName}`,
-          fileBase64: await fileToBase64(accessoryFile.file),
-          contentType: accessoryFile.file.type,
-        })
-        uploadedUrls.push({ url: accessoryUploadResult.signedUrl, type: 'accessory' })
-      }
+      // Step 1: Get presigned upload URLs for all files at once
+      setGenerationStatus(`Getting upload URLs for ${filesToUpload.length} images...`)
+      const { uploads } = await getUploadUrlsMutation.mutateAsync({
+        files: filesToUpload.map((f) => ({
+          fileName: f.file.name,
+          contentType: f.file.type,
+          type: f.type,
+        })),
+      })
+
+      // Step 2: Upload all files CONCURRENTLY using presigned URLs
+      setGenerationStatus(`Uploading ${filesToUpload.length} images concurrently...`)
+      await Promise.all(
+        uploads.map((upload, index) =>
+          uploadToPresignedUrl(filesToUpload[index].file, upload.uploadUrl, upload.token)
+        )
+      )
 
       setGenerationStatus('Queuing generation job...')
 
-      // Call generation endpoint with individual images
-      const modelUrl = uploadedUrls.find((img) => img.type === 'model')?.url
-      const outfitUrl = uploadedUrls.find((img) => img.type === 'outfit')?.url
-      const accessories = uploadedUrls
-        .filter((img) => img.type === 'accessory')
-        .map((img, i) => ({ type: `accessory-${i}`, url: img.url }))
+      // Step 3: Call generation endpoint with download URLs
+      const modelUpload = uploads.find((u) => u.type === 'model')
+      const outfitUpload = uploads.find((u) => u.type === 'outfit')
+      const accessoryUploads = uploads.filter((u) => u.type === 'accessory')
 
       const result = await generateMutation.mutateAsync({
-        modelImageUrl: modelUrl!,
-        outfitImageUrl: outfitUrl,
-        accessories: accessories.length > 0 ? accessories : undefined,
+        modelImageUrl: modelUpload!.downloadUrl,
+        outfitImageUrl: outfitUpload?.downloadUrl,
+        accessories: accessoryUploads.length > 0
+          ? accessoryUploads.map((u, i) => ({ type: `accessory-${i}`, url: u.downloadUrl }))
+          : undefined,
         promptUser: userPrompt || undefined,
       })
 

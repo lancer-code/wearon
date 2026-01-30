@@ -5,16 +5,17 @@ import dotenv from 'dotenv'
 import { resolve } from 'path'
 import axios from 'axios'
 import type { GenerationJobData } from '../services/queue'
-import { createCollage, type ImageInput } from '../services/image-processor'
-import { generateImage, GrokAPIError } from '../services/grok'
+import { generateWithOpenAI, OpenAIImageError } from '../services/openai-image'
 
 // Max retries configured in queue (must match queue.ts)
 const MAX_JOB_ATTEMPTS = 3
 
-// Load environment variables from apps/next/.env.local
+// Load environment variables from apps/next/.env.local FIRST
 const envPath = resolve(process.cwd(), '../../apps/next/.env.local')
 dotenv.config({ path: envPath })
 console.log('[Worker] Loaded env from:', envPath)
+
+console.log('[Worker] Using OpenAI GPT Image 1.5 for generation')
 
 // Initialize Supabase client with service role key (for worker operations)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -67,83 +68,35 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
 
     await job.updateProgress(10)
 
-    // Step 1: Prepare images for collage
-    const images: ImageInput[] = [
-      { url: modelImageUrl, type: 'model' },
-    ]
+    // Prepare accessory URLs
+    const accessoryUrls = accessories?.map((acc) => acc.url) || []
 
-    if (outfitImageUrl) {
-      images.push({ url: outfitImageUrl, type: 'outfit' })
-    }
+    const imageCount = 1 + (outfitImageUrl ? 1 : 0) + accessoryUrls.length
+    console.log(`[Worker] Sending ${imageCount} images directly to OpenAI for session ${sessionId}`)
+    console.log(`[Worker] Model: ${modelImageUrl.substring(0, 50)}...`)
+    console.log(`[Worker] Outfit: ${outfitImageUrl ? outfitImageUrl.substring(0, 50) + '...' : 'none'}`)
+    console.log(`[Worker] Accessories: ${accessoryUrls.length}`)
 
-    if (accessories && accessories.length > 0) {
-      accessories.forEach((acc) => {
-        images.push({ url: acc.url, type: 'accessory' })
-      })
-    }
+    await job.updateProgress(30)
 
-    await job.updateProgress(20)
-
-    // Step 2: Create collage using Sharp with semantic layout
-    console.log(`[Worker] Creating collage for session ${sessionId} with ${images.length} images`)
-    console.log(`[Worker] Images for collage:`, JSON.stringify(images.map(img => ({ type: img.type, url: img.url.substring(0, 50) + '...' })), null, 2))
-    const collageBuffer = await createCollage(images, {
-      width: 2048,
-      height: 2048,
-      quality: 95,
-      layout: 'semantic',
-    })
-
-    await job.updateProgress(40)
-
-    // Step 3: Upload collage to Supabase Storage
-    const collageFileName = `${sessionId}.jpg`
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('virtual-tryon-images')
-      .upload(`stitched/${collageFileName}`, collageBuffer, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      })
-
-    if (uploadError) {
-      throw new Error(`Failed to upload collage: ${uploadError.message}`)
-    }
-
-    // Get signed URL for the collage (6 hours expiry)
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from('virtual-tryon-images')
-      .createSignedUrl(`stitched/${collageFileName}`, 6 * 60 * 60)
-
-    if (signedUrlError || !signedUrlData) {
-      throw new Error(`Failed to create signed URL for collage: ${signedUrlError?.message}`)
-    }
-
-    const stitchedImageUrl = signedUrlData.signedUrl
-
-    // Update session with stitched image URL
-    await supabase
-      .from('generation_sessions')
-      .update({ stitched_image_url: stitchedImageUrl })
-      .eq('id', sessionId)
-
-    await job.updateProgress(60)
-
-    // Step 4: Call Grok API
-    console.log(`[Worker] Calling Grok API for session ${sessionId}`)
-    const grokResponse = await generateImage({
-      imageUrl: stitchedImageUrl,
-      systemPrompt: promptSystem,
-      userPrompt: promptUser,
+    // Call OpenAI GPT Image 1.5 API with multiple images directly
+    const generationResponse = await generateWithOpenAI({
+      modelImageUrl,
+      outfitImageUrl,
+      accessoryUrls,
+      prompt: promptUser,
+      quality: 'medium',
+      size: '1024x1536',
     })
 
     await job.updateProgress(90)
 
     // Step 5: Download generated image and re-upload to Supabase (prevent URL expiration)
     console.log(`[Worker] Downloading generated image for session ${sessionId}`)
-    let finalImageUrl = grokResponse.imageUrl
+    let finalImageUrl = generationResponse.imageUrl
 
     try {
-      const imageResponse = await axios.get(grokResponse.imageUrl, {
+      const imageResponse = await axios.get(generationResponse.imageUrl, {
         responseType: 'arraybuffer',
         timeout: 60000, // 1 minute timeout for download
       })
@@ -203,7 +156,7 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
         metadata: {
           session_id: sessionId,
           processing_time_ms: processingTime,
-          image_count: images.length,
+          image_count: imageCount,
         },
       })
 
@@ -211,7 +164,7 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
 
     console.log(`[Worker] Successfully completed generation for session ${sessionId} in ${processingTime}ms`)
 
-    return { success: true, sessionId, imageUrl: grokResponse.imageUrl }
+    return { success: true, sessionId, imageUrl: generationResponse.imageUrl }
   } catch (error) {
     console.error(`[Worker] Error processing session ${sessionId}:`, error)
 
@@ -219,7 +172,7 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
     const processingTime = Date.now() - startTime
 
     // Check if this is a rate limit error
-    const isRateLimitError = error instanceof GrokAPIError && error.statusCode === 429
+    const isRateLimitError = error instanceof OpenAIImageError && error.statusCode === 429
 
     if (isRateLimitError) {
       // Don't mark as failed yet, let BullMQ retry

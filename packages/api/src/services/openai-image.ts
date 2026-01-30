@@ -1,7 +1,13 @@
 import axios from 'axios'
 import FormData from 'form-data'
+import sharp from 'sharp'
 
 const OPENAI_API_BASE_URL = 'https://api.openai.com/v1'
+
+// Image resize settings for cost optimization
+// Target max dimension of 1024px reduces tokens significantly while maintaining quality
+const MAX_IMAGE_DIMENSION = 1024
+const JPEG_QUALITY = 85 // Good balance of quality and file size
 
 function getApiKey(): string {
   const key = process.env.OPENAI_API_KEY
@@ -49,6 +55,63 @@ async function downloadImage(url: string): Promise<Buffer> {
 }
 
 /**
+ * Resize image to reduce input tokens while maintaining aspect ratio
+ * - Targets max 1024px on longest side (reduces tokens ~75% for typical phone photos)
+ * - Maintains aspect ratio (no distortion)
+ * - Optimized for portrait images (most common in try-on)
+ * - Converts to JPEG for smaller file size
+ */
+async function resizeImageForCost(buffer: Buffer): Promise<Buffer> {
+  const metadata = await sharp(buffer).metadata()
+  const { width, height } = metadata
+
+  if (!width || !height) {
+    // Can't determine dimensions, return original
+    return buffer
+  }
+
+  const originalSize = buffer.length
+  const longestSide = Math.max(width, height)
+
+  // Skip resize if already small enough
+  if (longestSide <= MAX_IMAGE_DIMENSION) {
+    console.log(`[Resize] Image already small (${width}x${height}), skipping resize`)
+    // Still convert to JPEG for consistent format
+    return sharp(buffer)
+      .flatten({ background: { r: 255, g: 255, b: 255 } }) // Handle transparency
+      .jpeg({ quality: JPEG_QUALITY })
+      .toBuffer()
+  }
+
+  // Calculate new dimensions maintaining aspect ratio
+  const scale = MAX_IMAGE_DIMENSION / longestSide
+  const newWidth = Math.round(width * scale)
+  const newHeight = Math.round(height * scale)
+
+  const resized = await sharp(buffer)
+    .resize(newWidth, newHeight, {
+      fit: 'inside', // Maintain aspect ratio, fit within bounds
+      withoutEnlargement: true, // Never upscale
+    })
+    .flatten({ background: { r: 255, g: 255, b: 255 } }) // Handle PNG transparency
+    .jpeg({ quality: JPEG_QUALITY })
+    .toBuffer()
+
+  const reduction = ((originalSize - resized.length) / originalSize * 100).toFixed(1)
+  console.log(`[Resize] ${width}x${height} → ${newWidth}x${newHeight} (${reduction}% smaller)`)
+
+  return resized
+}
+
+/**
+ * Download and resize image for optimal cost
+ */
+async function downloadAndResizeImage(url: string): Promise<Buffer> {
+  const buffer = await downloadImage(url)
+  return resizeImageForCost(buffer)
+}
+
+/**
  * Generate virtual try-on image using OpenAI GPT Image 1.5
  *
  * This uses the images/edit endpoint with multiple input images:
@@ -67,27 +130,27 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
   console.log('[OpenAI Image] Outfit image:', outfitImageUrl ? outfitImageUrl.substring(0, 50) + '...' : 'none')
   console.log('[OpenAI Image] Accessories:', accessoryUrls.length)
 
-  // Download all images
-  console.log('[OpenAI Image] Downloading images...')
+  // Download and resize all images for cost optimization
+  console.log('[OpenAI Image] Downloading and resizing images...')
   const imageBuffers: { name: string; buffer: Buffer }[] = []
 
   // Model image (primary - person to dress)
-  const modelBuffer = await downloadImage(modelImageUrl)
-  imageBuffers.push({ name: 'model.png', buffer: modelBuffer })
+  const modelBuffer = await downloadAndResizeImage(modelImageUrl)
+  imageBuffers.push({ name: 'model.jpg', buffer: modelBuffer })
 
   // Outfit image
   if (outfitImageUrl) {
-    const outfitBuffer = await downloadImage(outfitImageUrl)
-    imageBuffers.push({ name: 'outfit.png', buffer: outfitBuffer })
+    const outfitBuffer = await downloadAndResizeImage(outfitImageUrl)
+    imageBuffers.push({ name: 'outfit.jpg', buffer: outfitBuffer })
   }
 
   // Accessory images
   for (let i = 0; i < accessoryUrls.length; i++) {
-    const accBuffer = await downloadImage(accessoryUrls[i])
-    imageBuffers.push({ name: `accessory_${i}.png`, buffer: accBuffer })
+    const accBuffer = await downloadAndResizeImage(accessoryUrls[i])
+    imageBuffers.push({ name: `accessory_${i}.jpg`, buffer: accBuffer })
   }
 
-  console.log('[OpenAI Image] Downloaded', imageBuffers.length, 'images')
+  console.log('[OpenAI Image] Downloaded and resized', imageBuffers.length, 'images')
 
   // Build the prompt for virtual try-on
   const tryOnPrompt = prompt || buildDefaultPrompt(!!outfitImageUrl, accessoryUrls.length)
@@ -106,7 +169,7 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
   for (const img of imageBuffers) {
     formData.append('image', img.buffer, {
       filename: img.name,
-      contentType: 'image/png',
+      contentType: 'image/jpeg',
     })
   }
 

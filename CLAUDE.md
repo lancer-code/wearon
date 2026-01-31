@@ -16,9 +16,9 @@ This is a **Tamagui + Solito + Next.js + Expo monorepo** for building universal 
 - **Supabase**: Backend as a Service (auth, database, storage, realtime)
 - **Axios**: HTTP client for all API requests (preferred over fetch)
 - **React Query**: Data fetching and caching
-- **Sharp**: High-performance image processing (collage stitching)
+- **Sharp**: High-performance image processing (resize for cost optimization)
 - **BullMQ + Redis**: Job queue with rate limiting (300 req/min)
-- **Grok API**: AI image generation (x.ai)
+- **OpenAI GPT Image 1.5**: AI image generation (virtual try-on)
 - **Biome**: Linting and formatting
 - **Vitest**: Testing framework
 - **Yarn 4.5**: Package manager
@@ -50,7 +50,7 @@ cd packages/api
 yarn worker            # Start BullMQ worker for image generation jobs
 ```
 
-The worker processes generation jobs from the queue, creates collages, calls Grok API, and updates session status via Supabase Realtime.
+The worker processes generation jobs from the queue, sends images directly to OpenAI GPT Image 1.5, and updates session status via Supabase Realtime. On startup, it clears any pending jobs from previous runs.
 
 ### Development Workflow
 ```bash
@@ -232,7 +232,7 @@ The API is built with tRPC and Supabase, providing type-safe end-to-end API call
 **Routers:**
 - **auth**: Authentication (signUp, signIn, signOut, session, updatePassword)
 - **user**: User management (me, byId, update)
-- **storage**: File storage (upload, getSignedUrl, delete, listFiles)
+- **storage**: File storage (getUploadUrls, getDownloadUrls, adminUpload, delete, listFiles)
 - **roles**: Role management (myRoles, myPermissions, assign, remove) - see RBAC section
 - **credits**: Credit balance and transactions
 - **generation**: Virtual try-on generation
@@ -472,11 +472,10 @@ WearOn is a virtual try-on platform where users upload photos and select outfits
 ### Architecture
 
 **Backend Services** (`packages/api/src/`):
-- **Image Processing** (`services/image-processor.ts`): Sharp-based collage stitcher that combines multiple images (model, outfit, accessories) into a single 2048x2048 image
+- **OpenAI Image Service** (`services/openai-image.ts`): GPT Image 1.5 API integration with image resize for cost optimization, moderation error handling
 - **Queue System** (`services/queue.ts`): BullMQ + Redis job queue with 300 requests/minute rate limiting
-- **Grok API Client** (`services/grok.ts`): Integration with x.ai Grok image generation API
 - **Storage Cleanup** (`services/storage-cleanup.ts`): Automatically deletes files older than 6 hours for privacy
-- **Generation Worker** (`workers/generation.worker.ts`): Background processor that handles the full pipeline
+- **Generation Worker** (`workers/generation.worker.ts`): Background processor with startup cleanup, moderation handling, no retries for failed jobs
 
 ### Database Schema
 
@@ -506,18 +505,27 @@ WearOn is a virtual try-on platform where users upload photos and select outfits
 
 ### Generation Pipeline
 
-1. User uploads images → Supabase Storage
-2. Mobile app calls `generation.create()` → Deducts 1 credit
-3. Job added to BullMQ queue → Returns session_id
-4. Mobile app subscribes to Supabase Realtime for status updates
-5. **Background Worker**:
+1. User uploads images via presigned URLs → Supabase Storage (`uploads/` folder)
+2. Frontend calls `storage.getDownloadUrls()` to get signed download URLs
+3. Frontend calls `generation.create()` with download URLs → Deducts 1 credit immediately
+4. Job added to BullMQ queue → Returns session_id
+5. Frontend subscribes to Supabase Realtime for status updates
+6. **Background Worker**:
    - Downloads images from Supabase Storage
-   - Creates collage using Sharp (high quality, 2048x2048)
-   - Uploads collage to Supabase Storage
-   - Calls Grok API with collage URL + prompts (generates 1 image)
-   - Saves result URL in generation_sessions
+   - Resizes images to max 1024px for cost optimization (~765 tokens each)
+   - Sends images directly to OpenAI GPT Image 1.5 `/images/edits` endpoint
+   - Handles base64 response (GPT Image always returns base64, no URL option)
+   - Uploads generated image to Supabase Storage (`generated/` folder)
+   - Creates signed URL, saves to generation_sessions
    - Updates status → Triggers Realtime notification
-6. Mobile app receives update instantly via WebSocket
+7. Frontend receives update instantly via WebSocket
+
+### Worker Behavior
+
+- **Startup Cleanup**: Clears all pending jobs on restart, refunds credits, marks sessions as failed
+- **No Retries**: Failed jobs return immediately (only rate limit errors retry)
+- **Moderation Handling**: OpenAI safety filter blocks show user-friendly message
+- **Autorun Disabled**: Worker starts paused until cleanup completes
 
 ### Privacy & Cleanup
 
@@ -539,7 +547,8 @@ WearOn is a virtual try-on platform where users upload photos and select outfits
 ### Environment Setup
 
 Required environment variables (`.env.local`):
-- `GROK_API_KEY`: x.ai API key for image generation
+- `OPENAI_API_KEY`: OpenAI API key for GPT Image 1.5
+- `OPENAI_MAX_RETRIES`: Retry count for OpenAI API (1 for dev, 3 for production)
 - `REDIS_URL`: Upstash Redis connection string
 - `SUPABASE_SERVICE_ROLE_KEY`: For worker operations
 - `CRON_SECRET`: Security for Vercel Cron endpoint
@@ -557,12 +566,35 @@ cd packages/api
 yarn worker
 ```
 
+### Presigned URL Upload Flow
+
+The upload uses a two-step process to avoid "Object not found" errors:
+
+1. **Get Upload URLs**: `storage.getUploadUrls()` returns presigned URLs + paths
+2. **Upload Files**: Client uploads directly to Supabase Storage using presigned URLs
+3. **Get Download URLs**: `storage.getDownloadUrls()` creates signed download URLs AFTER upload completes
+4. **Pass to Generation**: Download URLs are passed to `generation.create()`
+
+This split is required because Supabase validates file existence when creating signed URLs.
+
+### Error Handling
+
+**Moderation Errors**: OpenAI safety filter blocks return user-friendly message:
+- "Your image was flagged by the safety filter. Please use different images that comply with content guidelines."
+- Credits are refunded, session marked as failed
+- Tracked in analytics as `generation_moderation_blocked` event
+
+**Rate Limits (429)**: Only error type that retries via BullMQ backoff
+
+**Other Errors**: Return immediately without retry, refund credits, mark session failed
+
 ### Testing
 
 1. Sign up → Check you received 10 free credits
-2. Call `generation.create()` with image URLs
-3. Worker should process job and update session
-4. Check Realtime updates arrive in mobile app
+2. Upload images via presigned URLs
+3. Call `generation.create()` with download URLs
+4. Worker should process job and update session
+5. Check Realtime updates arrive in frontend
 
 ### Documentation
 

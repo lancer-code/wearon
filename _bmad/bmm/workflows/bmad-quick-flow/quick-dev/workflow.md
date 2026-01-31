@@ -36,10 +36,12 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 
 - `installed_path` = `{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-dev`
 - `project_context` = `**/project-context.md` (load if exists)
+- `project_levels` = `{project-root}/_bmad/bmm/workflows/workflow-status/project-levels.yaml`
 
 ### Related Workflows
 
 - `quick_spec_workflow` = `{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-spec/workflow.md`
+- `workflow_init` = `{project-root}/_bmad/bmm/workflows/workflow-status/init/workflow.yaml`
 - `party_mode_exec` = `{project-root}/_bmad/core/workflows/party-mode/workflow.md`
 - `advanced_elicitation` = `{project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml`
 
@@ -47,4 +49,4 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 
 ## EXECUTION
 
-Read fully and follow: `steps/step-01-mode-detection.md` to begin the workflow.
+Load and execute `steps/step-01-mode-detection.md` to begin the workflow.

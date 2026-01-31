@@ -130,6 +130,7 @@ After agent loading and introduction:
 - Handle missing or incomplete agent entries gracefully
 - Cross-reference manifest with actual agent files
 - Prepare agent selection logic for intelligent conversation routing
+- Set up TTS voice configurations for each agent
 
 ## NEXT STEP:
 

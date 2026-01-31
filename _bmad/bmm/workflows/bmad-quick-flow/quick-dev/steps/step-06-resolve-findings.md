@@ -25,28 +25,19 @@ From previous steps:
 
 ## RESOLUTION OPTIONS
 
-Present: "How would you like to handle these findings?"
+Present choice to user:
 
-Display:
+```
+How would you like to handle these findings?
 
-**[W] Walk through** - Discuss each finding individually
-**[F] Fix automatically** - Automatically fix issues classified as "real"
-**[S] Skip** - Acknowledge and proceed to commit
-
-### Menu Handling Logic:
-
-- IF W: Execute WALK THROUGH section below
-- IF F: Execute FIX AUTOMATICALLY section below
-- IF S: Execute SKIP section below
-
-### EXECUTION RULES:
-
-- ALWAYS halt and wait for user input after presenting menu
-- ONLY proceed when user makes a selection
+**[1] Walk through** - Discuss each finding individually
+**[2] Auto-fix** - Automatically fix issues classified as "real"
+**[3] Skip** - Acknowledge and proceed to commit
+```
 
 ---
 
-## WALK THROUGH [W]
+## OPTION 1: WALK THROUGH
 
 For each finding in order:
 
@@ -61,7 +52,7 @@ After all findings processed, summarize what was fixed/skipped.
 
 ---
 
-## FIX AUTOMATICALLY [F]
+## OPTION 2: AUTO-FIX
 
 1. Filter findings to only those classified as "real"
 2. Apply fixes for each real finding
@@ -78,7 +69,7 @@ Skipped (noise/uncertain): F2, F4
 
 ---
 
-## SKIP [S]
+## OPTION 3: SKIP
 
 1. Acknowledge all findings were reviewed
 2. Note that user chose to proceed without fixes

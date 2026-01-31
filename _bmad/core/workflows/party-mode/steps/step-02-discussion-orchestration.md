@@ -6,6 +6,7 @@
 - 🎯 SELECT RELEVANT AGENTS based on topic analysis and expertise matching
 - 📋 MAINTAIN CHARACTER CONSISTENCY using merged agent personalities
 - 🔍 ENABLE NATURAL CROSS-TALK between agents for dynamic conversation
+- 💬 INTEGRATE TTS for each agent response immediately after text
 - ✅ YOU MUST ALWAYS SPEAK OUTPUT In your Agent communication style with the config `{communication_language}`
 
 ## EXECUTION PROTOCOLS:
@@ -20,6 +21,7 @@
 
 - Complete agent roster with merged personalities is available
 - User topic and conversation history guide agent selection
+- Party mode is active with TTS integration enabled
 - Exit triggers: `*exit`, `goodbye`, `end party`, `quit`
 
 ## YOUR TASK:
@@ -114,9 +116,19 @@ Allow natural back-and-forth within the same response round for dynamic interact
 
 ### 6. Response Round Completion
 
-After generating all agent responses for the round, let the user know he can speak naturally with the agents, an then show this menu opion"
+After generating all agent responses for the round:
 
-`[E] Exit Party Mode - End the collaborative session`
+**Presentation Format:**
+[Agent 1 Response with TTS]
+[Empty line for readability]
+[Agent 2 Response with TTS, potentially referencing Agent 1]
+[Empty line for readability]
+[Agent 3 Response with TTS, building on or offering new perspective]
+
+**Continue Option:**
+"[Agents have contributed their perspectives. Ready for more discussion?]
+
+[E] Exit Party Mode - End the collaborative session"
 
 ### 7. Exit Condition Checking
 
@@ -130,19 +142,23 @@ Check for exit conditions before continuing:
 **Natural Conclusion:**
 
 - Conversation seems naturally concluding
-- Confirm if the user wants to exit party mode and go back to where they were or continue chatting. Do it in a conversational way with an agent in the party.
+- Ask user: "Would you like to continue the discussion or end party mode?"
+- Respect user choice to continue or exit
 
 ### 8. Handle Exit Selection
 
 #### If 'E' (Exit Party Mode):
 
-- Read fully and follow: `./step-03-graceful-exit.md`
+- Update frontmatter: `stepsCompleted: [1, 2]`
+- Set `party_active: false`
+- Load: `./step-03-graceful-exit.md`
 
 ## SUCCESS METRICS:
 
 ✅ Intelligent agent selection based on topic analysis
 ✅ Authentic in-character responses maintained consistently
 ✅ Natural cross-talk and agent interactions enabled
+✅ TTS integration working for all agent responses
 ✅ Question handling protocol followed correctly
 ✅ [E] exit option presented after each response round
 ✅ Conversation context and state maintained throughout
@@ -152,6 +168,7 @@ Check for exit conditions before continuing:
 
 ❌ Generic responses without character consistency
 ❌ Poor agent selection not matching topic expertise
+❌ Missing TTS integration for agent responses
 ❌ Ignoring user questions or exit triggers
 ❌ Not enabling natural agent cross-talk and interactions
 ❌ Continuing conversation without user input when questions asked

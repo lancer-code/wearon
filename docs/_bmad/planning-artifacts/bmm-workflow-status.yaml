@@ -1,0 +1,40 @@
+# Workflow Status - WearOn
+# Tracks progress through BMM methodology phases
+# Implementation phase tracked separately in sprint-status.yaml
+
+# STATUS DEFINITIONS:
+# - required: Must be completed to progress
+# - optional: Can be completed but not required
+# - recommended: Strongly suggested but not required
+# - conditional: Required only if certain conditions met
+# - {file-path}: Completed - file created
+# - skipped: Optional workflow that was skipped
+
+generated: "2026-02-01"
+project: "wearon"
+project_type: "software"
+selected_track: "method"
+field_type: "brownfield"
+workflow_path: "_bmad/bmm/workflows/workflow-status/paths/method-brownfield.yaml"
+
+workflow_status:
+  # Phase 0: Documentation (Prerequisite for brownfield)
+  document-project: "docs/project-documentation/index.md"  # COMPLETED
+
+  # Phase 1: Analysis (Optional - user selected)
+  brainstorm-project: required  # User requested
+  research: optional
+  product-brief: optional
+
+  # Phase 2: Planning
+  prd: required
+  create-ux-design: conditional  # if_has_ui - determined after PRD
+
+  # Phase 3: Solutioning
+  create-architecture: required
+  create-epics-and-stories: required
+  test-design: optional
+  implementation-readiness: required
+
+  # Phase 4: Implementation
+  sprint-planning: required

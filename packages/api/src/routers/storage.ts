@@ -4,6 +4,7 @@ import { router, protectedProcedure, adminProcedure } from '../trpc'
 export const storageRouter = router({
   // Get presigned upload URLs for direct client-to-storage upload
   // This is the recommended approach - bypasses backend for file upload
+  // NOTE: Only returns upload URLs. Call getDownloadUrls AFTER upload completes.
   getUploadUrls: adminProcedure
     .input(
       z.object({
@@ -31,27 +32,54 @@ export const storageRouter = router({
             throw new Error(`Failed to create upload URL for ${file.fileName}: ${error.message}`)
           }
 
-          // Also create a signed download URL for after upload (valid for 6 hours)
-          const { data: downloadData, error: downloadError } = await ctx.adminSupabase.storage
-            .from(input.bucket)
-            .createSignedUrl(path, 6 * 60 * 60) // 6 hours
-
-          if (downloadError) {
-            throw new Error(`Failed to create download URL for ${file.fileName}: ${downloadError.message}`)
-          }
-
           return {
             fileName: file.fileName,
             type: file.type,
             path,
             uploadUrl: data.signedUrl,
             token: data.token,
-            downloadUrl: downloadData.signedUrl,
           }
         })
       )
 
       return { uploads: results }
+    }),
+
+  // Get signed download URLs for files that have been uploaded
+  // Call this AFTER uploading files via getUploadUrls
+  getDownloadUrls: adminProcedure
+    .input(
+      z.object({
+        files: z.array(
+          z.object({
+            path: z.string(),
+            type: z.enum(['model', 'outfit', 'accessory']),
+          })
+        ).min(1).max(10),
+        bucket: z.string().default('virtual-tryon-images'),
+        expiresIn: z.number().optional().default(6 * 60 * 60), // 6 hours default
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const results = await Promise.all(
+        input.files.map(async (file) => {
+          const { data, error } = await ctx.adminSupabase.storage
+            .from(input.bucket)
+            .createSignedUrl(file.path, input.expiresIn)
+
+          if (error) {
+            throw new Error(`Failed to create download URL for ${file.path}: ${error.message}`)
+          }
+
+          return {
+            path: file.path,
+            type: file.type,
+            downloadUrl: data.signedUrl,
+          }
+        })
+      )
+
+      return { downloads: results }
     }),
 
   // Admin upload - uses service role key to bypass RLS

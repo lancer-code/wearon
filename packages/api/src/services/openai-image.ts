@@ -22,11 +22,15 @@ export class OpenAIImageError extends Error {
     message: string,
     public statusCode?: number,
     public response?: unknown,
+    public isModerationError: boolean = false,
   ) {
     super(message)
     this.name = 'OpenAIImageError'
   }
 }
+
+// User-friendly moderation error message
+const MODERATION_ERROR_MESSAGE = 'Your image was flagged by the safety filter. Please use different images that comply with content guidelines.'
 
 export interface OpenAIImageOptions {
   modelImageUrl: string
@@ -38,7 +42,8 @@ export interface OpenAIImageOptions {
 }
 
 export interface OpenAIImageResponse {
-  imageUrl: string
+  imageUrl?: string
+  imageBase64?: string
   model: string
   created: number
 }
@@ -55,18 +60,33 @@ async function downloadImage(url: string): Promise<Buffer> {
 }
 
 /**
+ * Calculate estimated tokens for an image based on OpenAI's formula:
+ * - Images are tiled at 512x512
+ * - Base cost: 85 tokens
+ * - Per tile: 170 tokens
+ * - Formula: 85 + 170 * ceil(width/512) * ceil(height/512)
+ */
+function calculateImageTokens(width: number, height: number): number {
+  const tilesX = Math.ceil(width / 512)
+  const tilesY = Math.ceil(height / 512)
+  const totalTiles = tilesX * tilesY
+  return 85 + 170 * totalTiles
+}
+
+/**
  * Resize image to reduce input tokens while maintaining aspect ratio
  * - Targets max 1024px on longest side (reduces tokens ~75% for typical phone photos)
  * - Maintains aspect ratio (no distortion)
  * - Optimized for portrait images (most common in try-on)
  * - Converts to JPEG for smaller file size
  */
-async function resizeImageForCost(buffer: Buffer): Promise<Buffer> {
+async function resizeImageForCost(buffer: Buffer, imageName: string): Promise<Buffer> {
   const metadata = await sharp(buffer).metadata()
   const { width, height } = metadata
 
   if (!width || !height) {
     // Can't determine dimensions, return original
+    console.log(`[Tokens] ${imageName}: unknown dimensions, assuming ~765 tokens`)
     return buffer
   }
 
@@ -75,7 +95,8 @@ async function resizeImageForCost(buffer: Buffer): Promise<Buffer> {
 
   // Skip resize if already small enough
   if (longestSide <= MAX_IMAGE_DIMENSION) {
-    console.log(`[Resize] Image already small (${width}x${height}), skipping resize`)
+    const tokens = calculateImageTokens(width, height)
+    console.log(`[Tokens] ${imageName}: ${width}x${height} = ${tokens} tokens (no resize needed)`)
     // Still convert to JPEG for consistent format
     return sharp(buffer)
       .flatten({ background: { r: 255, g: 255, b: 255 } }) // Handle transparency
@@ -98,7 +119,9 @@ async function resizeImageForCost(buffer: Buffer): Promise<Buffer> {
     .toBuffer()
 
   const reduction = ((originalSize - resized.length) / originalSize * 100).toFixed(1)
-  console.log(`[Resize] ${width}x${height} → ${newWidth}x${newHeight} (${reduction}% smaller)`)
+  const originalTokens = calculateImageTokens(width, height)
+  const newTokens = calculateImageTokens(newWidth, newHeight)
+  console.log(`[Tokens] ${imageName}: ${width}x${height} (${originalTokens} tokens) → ${newWidth}x${newHeight} (${newTokens} tokens) - saved ${originalTokens - newTokens} tokens, ${reduction}% smaller file`)
 
   return resized
 }
@@ -106,9 +129,9 @@ async function resizeImageForCost(buffer: Buffer): Promise<Buffer> {
 /**
  * Download and resize image for optimal cost
  */
-async function downloadAndResizeImage(url: string): Promise<Buffer> {
+async function downloadAndResizeImage(url: string, imageName: string): Promise<Buffer> {
   const buffer = await downloadImage(url)
-  return resizeImageForCost(buffer)
+  return resizeImageForCost(buffer, imageName)
 }
 
 /**
@@ -135,22 +158,32 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
   const imageBuffers: { name: string; buffer: Buffer }[] = []
 
   // Model image (primary - person to dress)
-  const modelBuffer = await downloadAndResizeImage(modelImageUrl)
+  const modelBuffer = await downloadAndResizeImage(modelImageUrl, 'model')
   imageBuffers.push({ name: 'model.jpg', buffer: modelBuffer })
 
   // Outfit image
   if (outfitImageUrl) {
-    const outfitBuffer = await downloadAndResizeImage(outfitImageUrl)
+    const outfitBuffer = await downloadAndResizeImage(outfitImageUrl, 'outfit')
     imageBuffers.push({ name: 'outfit.jpg', buffer: outfitBuffer })
   }
 
   // Accessory images
   for (let i = 0; i < accessoryUrls.length; i++) {
-    const accBuffer = await downloadAndResizeImage(accessoryUrls[i])
+    const accBuffer = await downloadAndResizeImage(accessoryUrls[i], `accessory_${i}`)
     imageBuffers.push({ name: `accessory_${i}.jpg`, buffer: accBuffer })
   }
 
   console.log('[OpenAI Image] Downloaded and resized', imageBuffers.length, 'images')
+
+  // Calculate total estimated cost (input tokens at $8/1M)
+  // Note: After resizing to max 1024px, each image is ~765 tokens (2x2 tiles)
+  const estimatedTokensPerImage = 765 // 85 + 170 * 4 tiles (1024x1024 max)
+  const totalInputTokens = imageBuffers.length * estimatedTokensPerImage
+  const inputCost = (totalInputTokens / 1_000_000) * 8 // $8 per 1M tokens
+  const outputCost = 0.05 // Fixed for medium quality 1024x1536
+  const totalCost = inputCost + outputCost
+  console.log(`[Cost] Estimated: ${imageBuffers.length} images × ~${estimatedTokensPerImage} tokens = ${totalInputTokens} input tokens`)
+  console.log(`[Cost] Input: $${inputCost.toFixed(4)} + Output: $${outputCost.toFixed(2)} = Total: $${totalCost.toFixed(4)}`)
 
   // Build the prompt for virtual try-on
   const tryOnPrompt = prompt || buildDefaultPrompt(!!outfitImageUrl, accessoryUrls.length)
@@ -164,16 +197,17 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
   formData.append('quality', quality)
   formData.append('size', size)
   formData.append('n', '1')
+  // Note: response_format not supported for /images/edits - we handle both URL and base64
 
-  // Add all images - first image is the primary (model)
+  // Add all images using array syntax - first image is the primary (model)
   for (const img of imageBuffers) {
-    formData.append('image', img.buffer, {
+    formData.append('image[]', img.buffer, {
       filename: img.name,
       contentType: 'image/jpeg',
     })
   }
 
-  const maxRetries = 3
+  const maxRetries = parseInt(process.env.OPENAI_MAX_RETRIES || '3', 10)
   let lastError: Error | null = null
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -188,20 +222,31 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
         timeout: 180000, // 3 minute timeout
       })
 
-      const generatedUrl = response.data.data?.[0]?.url || response.data.data?.[0]?.b64_json
-      if (!generatedUrl) {
-        throw new OpenAIImageError('No image URL in response', response.status, response.data)
+      const imageUrl = response.data.data?.[0]?.url
+      const imageBase64 = response.data.data?.[0]?.b64_json
+
+      if (!imageUrl && !imageBase64) {
+        throw new OpenAIImageError('No image data in response', response.status, response.data)
       }
 
-      console.log('[OpenAI Image] Success!')
+      console.log('[OpenAI Image] Success!', imageUrl ? 'Got URL' : 'Got base64')
       return {
-        imageUrl: generatedUrl,
+        imageUrl,
+        imageBase64,
         model: 'gpt-image-1.5',
         created: response.data.created || Date.now(),
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status
+        const errorData = error.response?.data as { error?: { code?: string; message?: string } } | undefined
+        const errorCode = errorData?.error?.code
+
+        // Moderation/safety error - don't retry, throw with user-friendly message
+        if (status === 400 && errorCode === 'moderation_blocked') {
+          console.log('[OpenAI Image] Content moderation blocked request')
+          throw new OpenAIImageError(MODERATION_ERROR_MESSAGE, 400, error.response?.data, true)
+        }
 
         // Rate limit - throw immediately for BullMQ to handle
         if (status === 429) {

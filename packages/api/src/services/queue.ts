@@ -9,7 +9,6 @@ export interface GenerationJobData {
   outfitImageUrl?: string
   accessories?: Array<{ type: string; url: string }>
   promptSystem: string
-  promptUser?: string
 }
 
 // Lazy-initialized Redis connection and queue (only connect when needed)

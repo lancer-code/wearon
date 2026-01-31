@@ -31,7 +31,6 @@ export const generationRouter = router({
             })
           )
           .optional(),
-        promptUser: z.string().max(500).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -82,7 +81,6 @@ export const generationRouter = router({
           outfit_image_url: input.outfitImageUrl,
           accessories: input.accessories || [],
           prompt_system: DEFAULT_SYSTEM_PROMPT,
-          prompt_user: input.promptUser,
           credits_used: 1,
         })
         .select('id')
@@ -109,7 +107,6 @@ export const generationRouter = router({
           outfitImageUrl: input.outfitImageUrl,
           accessories: input.accessories,
           promptSystem: DEFAULT_SYSTEM_PROMPT,
-          promptUser: input.promptUser,
         })
 
         // Log analytics event

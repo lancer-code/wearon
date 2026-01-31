@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { YStack, XStack, Text, Card, Image, Button, PageHeader, PageContent, PageFooter, Input, useToastController } from '@my/ui'
-import { Upload, X, RotateCcw, User, Watch, Shirt, Sparkles, Wifi, WifiOff } from '@tamagui/lucide-icons'
+import { YStack, XStack, Text, Card, Image, Button, PageHeader, PageContent, PageFooter, useToastController } from '@my/ui'
+import { Upload, X, RotateCcw, User, Watch, Shirt, Sparkles } from '@tamagui/lucide-icons'
 import { trpc } from '../../utils/trpc'
 import { useSupabase } from '../../provider/SupabaseProvider'
 import { supabase } from '../../utils/supabase'
@@ -247,7 +247,6 @@ export function AdminGenerations() {
   const [error, setError] = useState<string | null>(null)
 
   // Generation state
-  const [userPrompt, setUserPrompt] = useState('')
   const [generatedImage, setGeneratedImage] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStatus, setGenerationStatus] = useState<string | null>(null)
@@ -258,6 +257,7 @@ export function AdminGenerations() {
   useSupabase() // Keep hook for auth state if needed
 
   const getUploadUrlsMutation = trpc.storage.getUploadUrls.useMutation()
+  const getDownloadUrlsMutation = trpc.storage.getDownloadUrls.useMutation()
   const generateMutation = trpc.generation.create.useMutation()
 
   // Establish Realtime connection on page load - subscribe to generation_sessions table
@@ -395,7 +395,6 @@ export function AdminGenerations() {
     setGeneratedImage(null)
     setIsGenerating(false)
     setGenerationStatus(null)
-    setUserPrompt('')
     setCurrentSessionId(null)
   }
 
@@ -443,20 +442,28 @@ export function AdminGenerations() {
         )
       )
 
+      // Step 3: Get download URLs AFTER files are uploaded
+      setGenerationStatus('Getting download URLs...')
+      const { downloads } = await getDownloadUrlsMutation.mutateAsync({
+        files: uploads.map((u) => ({
+          path: u.path,
+          type: u.type,
+        })),
+      })
+
       setGenerationStatus('Queuing generation job...')
 
-      // Step 3: Call generation endpoint with download URLs
-      const modelUpload = uploads.find((u) => u.type === 'model')
-      const outfitUpload = uploads.find((u) => u.type === 'outfit')
-      const accessoryUploads = uploads.filter((u) => u.type === 'accessory')
+      // Step 4: Call generation endpoint with download URLs
+      const modelDownload = downloads.find((d) => d.type === 'model')
+      const outfitDownload = downloads.find((d) => d.type === 'outfit')
+      const accessoryDownloads = downloads.filter((d) => d.type === 'accessory')
 
       const result = await generateMutation.mutateAsync({
-        modelImageUrl: modelUpload!.downloadUrl,
-        outfitImageUrl: outfitUpload?.downloadUrl,
-        accessories: accessoryUploads.length > 0
-          ? accessoryUploads.map((u, i) => ({ type: `accessory-${i}`, url: u.downloadUrl }))
+        modelImageUrl: modelDownload!.downloadUrl,
+        outfitImageUrl: outfitDownload?.downloadUrl,
+        accessories: accessoryDownloads.length > 0
+          ? accessoryDownloads.map((d, i) => ({ type: `accessory-${i}`, url: d.downloadUrl }))
           : undefined,
-        promptUser: userPrompt || undefined,
       })
 
       // Set session ID to trigger Realtime subscription
@@ -541,31 +548,6 @@ export function AdminGenerations() {
             )}
           </YStack>
         </Card>
-
-        {/* User Prompt Section */}
-        {modelImages.length > 0 && (
-          <Card padding="$4" bordered>
-            <YStack gap="$3">
-              <Text fontWeight="600" fontSize="$5">
-                Custom Prompt (Optional)
-              </Text>
-              <Text color="$color8" fontSize="$2">
-                Add specific instructions for the AI. E.g., "Make the model smile" or "Use outdoor lighting"
-              </Text>
-              <Input
-                placeholder="Enter additional instructions for the AI..."
-                value={userPrompt}
-                onChange={(e) => setUserPrompt((e.target as HTMLInputElement).value)}
-                multiline
-                numberOfLines={3}
-                maxLength={500}
-              />
-              <Text color="$color8" fontSize="$1" textAlign="right">
-                {userPrompt.length}/500 characters
-              </Text>
-            </YStack>
-          </Card>
-        )}
 
         {/* Generated Image Section */}
         <Card padding="$4" bordered>

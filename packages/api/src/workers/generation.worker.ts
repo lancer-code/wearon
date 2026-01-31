@@ -57,7 +57,7 @@ redisConnection.on('connect', () => {
  */
 async function processGenerationJob(job: Job<GenerationJobData>) {
   const startTime = Date.now()
-  const { sessionId, userId, modelImageUrl, outfitImageUrl, accessories, promptSystem, promptUser } = job.data
+  const { sessionId, userId, modelImageUrl, outfitImageUrl, accessories, promptSystem } = job.data
 
   try {
     // Update session status to processing
@@ -84,54 +84,70 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
       modelImageUrl,
       outfitImageUrl,
       accessoryUrls,
-      prompt: promptUser,
       quality: 'medium',
       size: '1024x1536',
     })
 
     await job.updateProgress(90)
 
-    // Step 5: Download generated image and re-upload to Supabase (prevent URL expiration)
-    console.log(`[Worker] Downloading generated image for session ${sessionId}`)
-    let finalImageUrl = generationResponse.imageUrl
+    // Step 5: Get image buffer and re-upload to Supabase (prevent URL expiration)
+    console.log(`[Worker] Processing generated image for session ${sessionId}`)
+    let finalImageUrl = generationResponse.imageUrl || ''
+    let imageBuffer: Buffer | null = null
 
     try {
-      const imageResponse = await axios.get(generationResponse.imageUrl, {
-        responseType: 'arraybuffer',
-        timeout: 60000, // 1 minute timeout for download
-      })
-
-      const imageBuffer = Buffer.from(imageResponse.data)
-      const generatedFileName = `${sessionId}-generated.jpg`
-
-      const { error: generatedUploadError } = await supabase.storage
-        .from('virtual-tryon-images')
-        .upload(`generated/${generatedFileName}`, imageBuffer, {
-          contentType: 'image/jpeg',
-          upsert: true,
+      // Handle both URL and base64 responses from OpenAI
+      if (generationResponse.imageBase64) {
+        // OpenAI returned base64 data - decode directly
+        console.log(`[Worker] Decoding base64 image data`)
+        imageBuffer = Buffer.from(generationResponse.imageBase64, 'base64')
+      } else if (generationResponse.imageUrl) {
+        // OpenAI returned URL - download it
+        console.log(`[Worker] Downloading image from URL`)
+        const imageResponse = await axios.get(generationResponse.imageUrl, {
+          responseType: 'arraybuffer',
+          timeout: 60000, // 1 minute timeout for download
         })
+        imageBuffer = Buffer.from(imageResponse.data)
+      }
 
-      if (!generatedUploadError) {
-        // Create signed URL (expires in 6 hours to match cleanup schedule)
-        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      if (imageBuffer) {
+        const generatedFileName = `${sessionId}-generated.png`
+
+        const { error: generatedUploadError } = await supabase.storage
           .from('virtual-tryon-images')
-          .createSignedUrl(`generated/${generatedFileName}`, 6 * 60 * 60) // 6 hours
+          .upload(`generated/${generatedFileName}`, imageBuffer, {
+            contentType: 'image/png',
+            upsert: true,
+          })
 
-        if (signedUrlData && !signedUrlError) {
-          finalImageUrl = signedUrlData.signedUrl
-          console.log(`[Worker] Created signed URL for generated image: ${finalImageUrl}`)
-        } else {
-          console.warn(`[Worker] Failed to create signed URL, using public URL`)
-          const { data: publicUrlData } = supabase.storage
+        if (!generatedUploadError) {
+          // Create signed URL (expires in 6 hours to match cleanup schedule)
+          const { data: signedUrlData, error: signedUrlError } = await supabase.storage
             .from('virtual-tryon-images')
-            .getPublicUrl(`generated/${generatedFileName}`)
-          finalImageUrl = publicUrlData.publicUrl
+            .createSignedUrl(`generated/${generatedFileName}`, 6 * 60 * 60) // 6 hours
+
+          if (signedUrlData && !signedUrlError) {
+            finalImageUrl = signedUrlData.signedUrl
+            console.log(`[Worker] Created signed URL for generated image`)
+          } else {
+            console.warn(`[Worker] Failed to create signed URL, using public URL`)
+            const { data: publicUrlData } = supabase.storage
+              .from('virtual-tryon-images')
+              .getPublicUrl(`generated/${generatedFileName}`)
+            finalImageUrl = publicUrlData.publicUrl
+          }
+        } else {
+          console.warn(`[Worker] Failed to save generated image to Supabase: ${generatedUploadError.message}`)
         }
-      } else {
-        console.warn(`[Worker] Failed to save generated image to Supabase, using original URL: ${generatedUploadError.message}`)
       }
     } catch (downloadError) {
-      console.warn(`[Worker] Failed to download generated image, using original URL:`, downloadError)
+      console.warn(`[Worker] Failed to process generated image:`, downloadError)
+    }
+
+    // Verify we have a valid image URL before marking as completed
+    if (!finalImageUrl) {
+      throw new Error('Failed to generate or save image - no valid URL')
     }
 
     // Step 6: Update session with generated image URL
@@ -171,8 +187,9 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     const processingTime = Date.now() - startTime
 
-    // Check if this is a rate limit error
+    // Check error type
     const isRateLimitError = error instanceof OpenAIImageError && error.statusCode === 429
+    const isModerationError = error instanceof OpenAIImageError && error.isModerationError
 
     if (isRateLimitError) {
       // Don't mark as failed yet, let BullMQ retry
@@ -188,7 +205,12 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
       throw error
     }
 
-    // For non-rate-limit errors, mark as failed immediately and refund
+    // For moderation errors, log but don't expose raw error details
+    if (isModerationError) {
+      console.log(`[Worker] Content moderation blocked session ${sessionId}`)
+    }
+
+    // For non-rate-limit errors (including moderation), mark as failed immediately and refund
     // Wrap all Supabase calls in try-catch to prevent silent failures
     try {
       // Refund credits on failure (only if not already refunded)
@@ -230,29 +252,33 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
       await supabase
         .from('analytics_events')
         .insert({
-          event_type: 'generation_failed',
+          event_type: isModerationError ? 'generation_moderation_blocked' : 'generation_failed',
           user_id: userId,
           metadata: {
             session_id: sessionId,
             error: errorMessage,
             processing_time_ms: processingTime,
+            moderation_blocked: isModerationError,
           },
         })
     } catch (analyticsError) {
       console.error(`[Worker] Failed to log analytics event:`, analyticsError)
     }
 
-    throw error
+    // Return instead of throw to prevent BullMQ from retrying
+    // We've already handled the failure (refund + status update)
+    return { success: false, sessionId, error: errorMessage }
   }
 }
 
-// Create the worker
+// Create the worker (paused - will start after cleanup)
 export const generationWorker = new Worker<GenerationJobData>(
   'image-generation',
   processGenerationJob,
   {
     connection: redisConnection as any, // Type assertion due to BullMQ bundled ioredis version mismatch
     concurrency: 5, // Process up to 5 jobs concurrently
+    autorun: false, // Don't start automatically - wait for cleanup
     limiter: {
       max: 300,
       duration: 60000, // Match queue rate limit
@@ -351,6 +377,84 @@ generationWorker.on('error', (err) => {
   console.error('[Worker] Worker error:', err)
 })
 
+// Clear old pending jobs on startup
+async function clearPendingJobs() {
+  console.log('[Worker] Clearing old pending jobs...')
+
+  const queue = new Queue<GenerationJobData>('image-generation', {
+    connection: redisConnection as any,
+  })
+
+  try {
+    // Get all waiting and delayed jobs
+    const [waitingJobs, delayedJobs] = await Promise.all([
+      queue.getWaiting(),
+      queue.getDelayed(),
+    ])
+
+    const allPendingJobs = [...waitingJobs, ...delayedJobs]
+
+    if (allPendingJobs.length === 0) {
+      console.log('[Worker] No pending jobs to clear')
+      await queue.close()
+      return
+    }
+
+    console.log(`[Worker] Found ${allPendingJobs.length} pending jobs to clear`)
+
+    // Process each pending job - mark as failed and refund
+    for (const job of allPendingJobs) {
+      const { sessionId, userId } = job.data
+
+      try {
+        // Check if already processed
+        const { data: session } = await supabase
+          .from('generation_sessions')
+          .select('status')
+          .eq('id', sessionId)
+          .single()
+
+        if (session && session.status !== 'failed' && session.status !== 'completed') {
+          // Refund credits
+          await supabase.rpc('refund_credits', {
+            p_user_id: userId,
+            p_amount: 1,
+            p_description: 'Job cleared on worker restart',
+          })
+
+          // Mark session as failed
+          await supabase
+            .from('generation_sessions')
+            .update({
+              status: 'failed',
+              error_message: 'Job cleared on worker restart - please try again',
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', sessionId)
+        }
+
+        // Remove job from queue
+        await job.remove()
+      } catch (jobError) {
+        console.error(`[Worker] Failed to clear job ${job.id}:`, jobError)
+      }
+    }
+
+    console.log(`[Worker] Cleared ${allPendingJobs.length} pending jobs`)
+  } catch (error) {
+    console.error('[Worker] Failed to clear pending jobs:', error)
+  } finally {
+    await queue.close()
+  }
+}
+
+// Run cleanup on startup, then start the worker
+clearPendingJobs().then(() => {
+  console.log('[Worker] Startup cleanup complete, starting worker...')
+  generationWorker.run()
+  console.log('[Worker] Worker is now processing new jobs')
+})
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('[Worker] SIGTERM received, closing worker...')
@@ -366,6 +470,6 @@ process.on('SIGINT', async () => {
   process.exit(0)
 })
 
-console.log('[Worker] Image generation worker started')
+console.log('[Worker] Image generation worker initialized (paused until cleanup completes)')
 
 export default generationWorker

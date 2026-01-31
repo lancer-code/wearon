@@ -15,7 +15,7 @@ const EXPIRY_HOURS = 6
 export interface CleanupResult {
   deletedCount: number
   folders: {
-    userUploads: number
+    uploads: number
     generated: number
   }
   errors: Array<{ file: string; error: string }>
@@ -95,17 +95,17 @@ export async function cleanupExpiredFiles(): Promise<CleanupResult> {
   const result: CleanupResult = {
     deletedCount: 0,
     folders: {
-      userUploads: 0,
+      uploads: 0,
       generated: 0,
     },
     errors: [],
   }
 
-  // Clean up user-uploads folder (user-submitted images)
-  const userUploadsResult = await cleanupFolder('user-uploads', EXPIRY_HOURS)
-  result.folders.userUploads = userUploadsResult.deletedCount
-  result.deletedCount += userUploadsResult.deletedCount
-  result.errors.push(...userUploadsResult.errors)
+  // Clean up uploads folder (user-submitted images via presigned URLs)
+  const uploadsResult = await cleanupFolder('uploads', EXPIRY_HOURS)
+  result.folders.uploads = uploadsResult.deletedCount
+  result.deletedCount += uploadsResult.deletedCount
+  result.errors.push(...uploadsResult.errors)
 
   // Clean up generated folder (AI-generated images)
   const generatedResult = await cleanupFolder('generated', EXPIRY_HOURS)

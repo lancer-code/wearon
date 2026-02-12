@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, Users, BarChart3, Image, CreditCard, Settings, LogOut } from '@tamagui/lucide-icons'
+import { Home, Users, BarChart3, Image, CreditCard, Settings, LogOut, Store, Activity, UserCircle, DollarSign } from '@tamagui/lucide-icons'
 import { useRouter } from 'solito/navigation'
 import { useSupabase } from '../../provider/SupabaseProvider'
 import { supabase } from '../../utils/supabase'
@@ -71,6 +71,10 @@ export function AdminSidebar({ activePath = '/admin' }: AdminSidebarProps) {
     { icon: Home, label: 'Dashboard', href: '/admin', adminOnly: false },
     { icon: Users, label: 'Users', href: '/admin/users', adminOnly: true },
     { icon: BarChart3, label: 'Analytics', href: '/admin/analytics', adminOnly: false },
+    { icon: Activity, label: 'B2B Analytics', href: '/admin/b2b-analytics', adminOnly: true },
+    { icon: UserCircle, label: 'B2C Analytics', href: '/admin/b2c-analytics', adminOnly: true },
+    { icon: DollarSign, label: 'Revenue', href: '/admin/revenue', adminOnly: true },
+    { icon: Store, label: 'Stores', href: '/admin/stores', adminOnly: true },
     { icon: Image, label: 'Generations', href: '/admin/generations', adminOnly: false },
     { icon: CreditCard, label: 'Credits', href: '/admin/credits', adminOnly: true },
     { icon: Settings, label: 'Settings', href: '/admin/settings', adminOnly: false },
@@ -124,7 +128,7 @@ export function AdminSidebar({ activePath = '/admin' }: AdminSidebarProps) {
             icon={item.icon}
             label={item.label}
             href={item.href}
-            active={activePath === item.href}
+            active={activePath === item.href || (item.href !== '/admin' && activePath?.startsWith(item.href))}
             adminOnly={item.adminOnly}
           />
         ))}

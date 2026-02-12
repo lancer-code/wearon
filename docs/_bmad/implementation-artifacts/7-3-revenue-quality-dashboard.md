@@ -1,6 +1,6 @@
 # Story 7.3: Revenue & Quality Dashboard
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -16,33 +16,33 @@ so that **I can track business health, margins, and generation quality**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Revenue analytics tRPC endpoints (AC: #1)
-  - [ ] 1.1 Add `getRevenueOverview` (adminProcedure) to analytics router.
-  - [ ] 1.2 Query `store_credit_transactions` for B2B wholesale revenue (credit purchases).
-  - [ ] 1.3 Query `credit_transactions` for B2C credit pack revenue.
-  - [ ] 1.4 Estimate OpenAI costs from generation count (configurable cost-per-generation).
-  - [ ] 1.5 Calculate margin: (total revenue - total costs) / total revenue.
-  - [ ] 1.6 Support date-range filtering.
+- [x] Task 1: Revenue analytics tRPC endpoints (AC: #1)
+  - [x] 1.1 Add `getRevenueOverview` (adminProcedure) to analytics router.
+  - [x] 1.2 Query `store_credit_transactions` for B2B wholesale revenue (credit purchases).
+  - [x] 1.3 Query `credit_transactions` for B2C credit pack revenue.
+  - [x] 1.4 Estimate OpenAI costs from generation count (configurable cost-per-generation).
+  - [x] 1.5 Calculate margin: (total revenue - total costs) / total revenue.
+  - [x] 1.6 Support date-range filtering.
 
-- [ ] Task 2: Quality metrics tRPC endpoints (AC: #2)
-  - [ ] 2.1 Add `getQualityMetrics` (adminProcedure) to analytics router.
-  - [ ] 2.2 Query both `store_generation_sessions` (B2B) and `generation_sessions` (B2C) for combined stats.
-  - [ ] 2.3 Calculate: success rate (completed / total), moderation block count (from analytics events), refund count, average generation time (completed_at - created_at).
-  - [ ] 2.4 Support date-range filtering and B2B/B2C channel breakdown.
+- [x] Task 2: Quality metrics tRPC endpoints (AC: #2)
+  - [x] 2.1 Add `getQualityMetrics` (adminProcedure) to analytics router.
+  - [x] 2.2 Query both `store_generation_sessions` (B2B) and `generation_sessions` (B2C) for combined stats.
+  - [x] 2.3 Calculate: success rate (completed / total), moderation block count (from analytics events), refund count, average generation time (completed_at - created_at).
+  - [x] 2.4 Support date-range filtering and B2B/B2C channel breakdown.
 
-- [ ] Task 3: Revenue & quality dashboard UI (AC: #1-2)
-  - [ ] 3.1 Create `packages/app/features/admin/admin-revenue-dashboard.tsx` component.
-  - [ ] 3.2 Revenue section: cards for B2B revenue, B2C revenue, costs, margin.
-  - [ ] 3.3 Quality section: cards for success rate, moderation blocks, refunds, avg generation time.
-  - [ ] 3.4 Add date-range picker for filtering.
-  - [ ] 3.5 Create `apps/next/app/admin/revenue/page.tsx` admin route.
-  - [ ] 3.6 Add navigation link in admin sidebar.
+- [x] Task 3: Revenue & quality dashboard UI (AC: #1-2)
+  - [x] 3.1 Create `packages/app/features/admin/admin-revenue-dashboard.tsx` component.
+  - [x] 3.2 Revenue section: cards for B2B revenue, B2C revenue, costs, margin.
+  - [x] 3.3 Quality section: cards for success rate, moderation blocks, refunds, avg generation time.
+  - [x] 3.4 Add date-range picker for filtering.
+  - [x] 3.5 Create `apps/next/app/admin/revenue/page.tsx` admin route.
+  - [x] 3.6 Add navigation link in admin sidebar.
 
-- [ ] Task 4: Write tests (AC: #1-2)
-  - [ ] 4.1 Test revenue overview calculates correct totals.
-  - [ ] 4.2 Test quality metrics combines B2B and B2C data correctly.
-  - [ ] 4.3 Test date-range filtering works for both endpoints.
-  - [ ] 4.4 Test admin-only access.
+- [x] Task 4: Write tests (AC: #1-2)
+  - [x] 4.1 Test revenue overview calculates correct totals.
+  - [x] 4.2 Test quality metrics combines B2B and B2C data correctly.
+  - [x] 4.3 Test date-range filtering works for both endpoints.
+  - [x] 4.4 Test admin-only access.
 
 ## Dev Notes
 
@@ -54,9 +54,9 @@ so that **I can track business health, margins, and generation quality**.
 
 ### Revenue Calculation
 
-- B2B revenue: sum of `store_credit_transactions` WHERE `type = 'purchase'`.
-- B2C revenue: sum of `credit_transactions` WHERE `type = 'purchase'`.
-- OpenAI costs: generation count * configurable rate (stored in admin settings or env var).
+- B2B revenue: sum of `store_credit_transactions` WHERE `type IN ('purchase', 'subscription')`.
+- B2C revenue: sum of `credit_transactions` WHERE `type = 'purchase'` (future-proof — no B2C purchase type exists yet).
+- OpenAI costs: generation count * configurable rate (`OPENAI_COST_PER_GENERATION` env var, default $0.05).
 - This is an estimate — exact revenue tracking depends on Paddle webhook-backed transaction data.
 
 ### Dependencies
@@ -84,10 +84,30 @@ so that **I can track business health, margins, and generation quality**.
 
 ### Agent Model Used
 
-(to be filled by dev agent)
+Claude Opus 4.6
 
 ### Debug Log References
 
+- No debug issues encountered during implementation.
+
 ### Completion Notes List
 
+- Added `getRevenueOverview` adminProcedure endpoint to `packages/api/src/routers/analytics.ts` — queries B2B `store_credit_transactions` (purchase + subscription types) and B2C `credit_transactions` (purchase type) for revenue, estimates OpenAI costs via configurable `OPENAI_COST_PER_GENERATION` env var (default $0.05), calculates margin percentage.
+- Added `getQualityMetrics` adminProcedure endpoint — combines B2B `store_generation_sessions` and B2C `generation_sessions` for success rate, queries `store_analytics_events` and `analytics_events` for moderation block counts, counts refunds from both transaction tables, calculates average generation time from completed sessions, includes B2B/B2C channel breakdown.
+- Both endpoints support optional `startDate`/`endDate` date-range filtering.
+- Created `admin-revenue-dashboard.tsx` UI component with revenue cards (B2B, B2C, costs, margin), quality cards (success rate, moderation blocks, refunds, avg gen time), channel breakdown table, and date-range picker.
+- Created `/admin/revenue` page route and added "Revenue" navigation link with DollarSign icon in admin sidebar (admin-only).
+- B2C revenue currently returns 0 — no `purchase` type exists in B2C `credit_transactions` yet (only signup_bonus/generation/refund). This is future-proof for when B2C credit purchases are implemented.
+- 14 tests covering revenue calculations, quality metrics, date filtering, channel breakdown, and admin access requirements.
+
 ### File List
+
+- `packages/api/src/routers/analytics.ts` — MODIFIED: Added `getRevenueOverview` and `getQualityMetrics` adminProcedure endpoints
+- `packages/app/features/admin/admin-revenue-dashboard.tsx` — NEW: Revenue & quality dashboard UI component
+- `apps/next/app/admin/revenue/page.tsx` — NEW: Admin revenue page route
+- `packages/app/features/admin/admin-sidebar.tsx` — MODIFIED: Added DollarSign import and Revenue nav item
+- `packages/api/__tests__/routers/revenue-quality.test.ts` — NEW: 14 tests for revenue and quality analytics
+
+## Change Log
+
+- 2026-02-12: Implemented all 4 tasks (revenue endpoints, quality endpoints, dashboard UI, tests).

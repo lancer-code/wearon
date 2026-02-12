@@ -7,6 +7,7 @@ import {
   errorResponse,
   successResponse,
 } from '../../../../../../../packages/api/src/utils/b2b-response'
+import { PLUGIN_PRIVACY_DISCLOSURE } from '../../../../../../../packages/api/src/templates/privacy-policy'
 
 let serviceClient: ReturnType<typeof createClient> | null = null
 
@@ -66,6 +67,7 @@ export async function handleGetStoreConfig(_request: Request, context: B2BContex
     shopifyVariantId: store.shopify_variant_id,
     subscriptionTier: store.subscription_tier,
     status: store.status,
+    privacyDisclosure: PLUGIN_PRIVACY_DISCLOSURE,
   })
 }
 

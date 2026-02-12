@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, Key, CreditCard, Settings, LogOut } from '@tamagui/lucide-icons'
+import { Home, Key, CreditCard, Settings, LogOut, Shield } from '@tamagui/lucide-icons'
 import { useRouter } from 'solito/navigation'
 import { useSupabase } from '../../provider/SupabaseProvider'
 import { supabase } from '../../utils/supabase'
@@ -65,6 +65,7 @@ export function MerchantSidebar({ activePath = '/merchant/dashboard' }: Merchant
     { icon: Home, label: 'Dashboard', href: '/merchant/dashboard' },
     { icon: Key, label: 'API Keys', href: '/merchant/api-keys' },
     { icon: CreditCard, label: 'Billing', href: '/merchant/billing' },
+    { icon: Shield, label: 'Privacy', href: '/merchant/privacy' },
     { icon: Settings, label: 'Settings', href: '/merchant/settings' },
   ]
 

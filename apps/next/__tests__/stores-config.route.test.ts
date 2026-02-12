@@ -108,6 +108,7 @@ describe('stores config route', () => {
       shopify_variant_id: '444555666',
       subscription_tier: 'starter',
       status: 'active',
+      privacy_disclosure: expect.any(String),
     })
   })
 

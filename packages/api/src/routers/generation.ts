@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
+import { logger } from '../logger'
 import { pushGenerationTask } from '../services/redis-queue'
 import { router, protectedProcedure } from '../trpc'
 import { TASK_PAYLOAD_VERSION } from '../types/queue'
@@ -35,11 +36,19 @@ export const generationRouter = router({
             })
           )
           .optional(),
+        ageVerified: z.boolean(),
       })
     )
     .mutation(async ({ input, ctx }) => {
       if (!ctx.user) {
         throw new Error('Unauthorized')
+      }
+
+      if (input.ageVerified !== true) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Age verification is required to use this feature',
+        })
       }
 
       const userId = ctx.user.id
@@ -67,7 +76,7 @@ export const generationRouter = router({
       })
 
       if (deductError) {
-        console.error('Credit deduction error:', deductError)
+        logger.error({ user_id: userId, error: deductError }, 'Credit deduction error')
         throw new Error(`Failed to deduct credits: ${deductError.message}`)
       }
 
@@ -158,9 +167,11 @@ export const generationRouter = router({
           .update({ status: 'failed', error_message: 'Failed to queue job' })
           .eq('id', sessionId)
 
+        // Note: TRPC doesn't have SERVICE_UNAVAILABLE code, using TIMEOUT as closest match
+        // HTTP status will be 408, but message clearly indicates unavailability
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Generation service temporarily unavailable',
+          code: 'TIMEOUT',
+          message: 'Generation service temporarily unavailable. Please try again later.',
         })
       }
     }),

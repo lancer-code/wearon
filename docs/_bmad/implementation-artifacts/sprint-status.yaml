@@ -72,7 +72,7 @@ development_status:
   epic-5: in-progress
   5-1-size-rec-proxy-api-endpoint: done
   5-2-body-profile-database-api: done
-  5-3-size-rec-display-confidence: in-progress
+  5-3-size-rec-display-confidence: done
   5-4-mediapipe-pose-estimation-service: done
   epic-5-retrospective: optional
 

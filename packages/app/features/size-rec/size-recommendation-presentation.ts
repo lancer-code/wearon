@@ -29,7 +29,10 @@ export function getSizeRecommendationPresentation(
   input: SizeRecommendationInput
 ): SizeRecommendationPresentation {
   const normalizedConfidence = Math.max(0, Math.min(1, Number(input.confidence ?? 0)))
-  const normalizedRange = input.sizeRange ?? FALLBACK_RANGE
+
+  // Guard against partial sizeRange objects
+  const hasValidRange = input.sizeRange?.lower && input.sizeRange?.upper
+  const normalizedRange = hasValidRange ? input.sizeRange : FALLBACK_RANGE
 
   if (normalizedConfidence >= CONFIDENCE_THRESHOLD) {
     return {

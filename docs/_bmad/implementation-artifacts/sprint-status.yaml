@@ -40,38 +40,38 @@ story_location: docs/_bmad/implementation-artifacts
 development_status:
   # Epic 1: Platform Foundation & Unified Generation Pipeline
   epic-1: in-progress
-  1-1-b2b-database-schema: review
-  1-2-cross-repo-infrastructure: review
-  1-3-redis-queue-service-bullmq-removal: review
+  1-1-b2b-database-schema: in-progress
+  1-2-cross-repo-infrastructure: in-progress
+  1-3-redis-queue-service-bullmq-removal: in-progress
   epic-1-retrospective: optional
 
   # Epic 2: Store Onboarding & Management
   epic-2: in-progress
-  2-1-b2b-rest-api-foundation-middleware: review
-  2-2-shopify-oauth-store-registration: review
-  2-3-merchant-onboarding-dashboard: review
-  2-4-store-uninstall-data-cleanup: review
+  2-1-b2b-rest-api-foundation-middleware: in-progress
+  2-2-shopify-oauth-store-registration: in-progress
+  2-3-merchant-onboarding-dashboard: in-progress
+  2-4-store-uninstall-data-cleanup: in-progress
   epic-2-retrospective: optional
 
   # Epic 3: Credit System & Merchant Billing
   epic-3: in-progress
-  3-1-b2b-store-credit-operations: review
-  3-2-stripe-subscription-payg-integration: on-hold  # Payment provider TBD — Stripe will NOT be used
-  3-3-subscription-management-overage: on-hold  # Blocked by 3-2 — payment provider TBD
+  3-1-b2b-store-credit-operations: in-progress
+  3-2-stripe-subscription-payg-integration: in-progress
+  3-3-subscription-management-overage: in-progress
   epic-3-retrospective: optional
 
   # Epic 4: Shopify Plugin Storefront & Virtual Try-On
   epic-4: in-progress
-  4-1-b2b-generation-rest-api-endpoints: review
-  4-2-plugin-theme-app-extension-core: review
-  4-3-try-on-experience-privacy: review
-  4-4-plugin-accessibility: review
+  4-1-b2b-generation-rest-api-endpoints: in-progress
+  4-2-plugin-theme-app-extension-core: in-progress
+  4-3-try-on-experience-privacy: in-progress
+  4-4-plugin-accessibility: in-progress
   epic-4-retrospective: optional
 
   # Epic 5: Size Recommendation
   epic-5: in-progress
-  5-1-size-rec-proxy-api-endpoint: review
-  5-2-body-profile-database-api: ready-for-dev
+  5-1-size-rec-proxy-api-endpoint: in-progress
+  5-2-body-profile-database-api: in-progress
   5-3-size-rec-display-confidence: ready-for-dev
   5-4-mediapipe-pose-estimation-service: ready-for-dev
   epic-5-retrospective: optional

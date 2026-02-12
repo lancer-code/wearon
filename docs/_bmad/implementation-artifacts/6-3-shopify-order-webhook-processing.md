@@ -70,7 +70,7 @@ so that **credits are added to shopper balances reliably and idempotently**.
 
 ### Credit Flow (Resell Mode)
 
-- Store buys credits wholesale from WearOn (via Stripe, Story 3.2).
+- Store buys credits wholesale from WearOn (via Paddle, Story 3.2).
 - Shopper buys credits from store (via Shopify checkout, this story).
 - On purchase: N credits move from `store_credits` → `store_shopper_credits`.
 - On generation: 1 credit deducted from `store_shopper_credits` (not store pool).

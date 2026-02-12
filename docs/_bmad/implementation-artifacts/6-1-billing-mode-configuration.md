@@ -46,7 +46,7 @@ so that **I can either offer free try-ons or sell credits to shoppers for profit
 
 ### Architecture Requirements
 
-- **ADR-5**: Free Connector App Pattern — billing on WearOn platform (payment provider TBD). [Source: architecture.md#ADR-5]
+- **ADR-5**: Free Connector App Pattern — billing on WearOn platform via Paddle. [Source: architecture.md#ADR-5]
 - **FR3**: Store owner can configure billing mode (absorb/resell).
 - **FR4**: Store owner can set retail credit price in resell mode.
 - Billing mode stored as enum in `stores.billing_mode` column: `absorb_mode` (default) or `resell_mode`.

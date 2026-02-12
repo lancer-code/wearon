@@ -58,7 +58,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - Shopify App Store review requirements (CSP compliance, data handling)
 - OpenAI API (rate limits, pricing, moderation policy)
 - MediaPipe (server-side pose estimation for size rec on Python worker — 33 3D landmarks)
-- Payment provider TBD (merchant billing on WearOn platform — Stripe will NOT be used)
+- Payment provider selected: Paddle (merchant billing on WearOn platform)
 
 **Solo Developer Constraint:**
 - Single developer (Abaid) building all components
@@ -71,7 +71,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 
 2. **Dual Authentication** — B2B: Shopify OAuth for merchant admin + domain-restricted API keys for plugin API calls. Shoppers must be logged into store account to use try-on (email auto-fetched from Shopify customer context). B2C: Supabase Auth (email/Google). B2B uses service role key with application-level store_id scoping (not RLS).
 
-3. **Dual Billing** — B2B: subscriptions + PAYG on WearOn's own platform (payment provider TBD, not Shopify Billing API). Plugin listed as free on Shopify App Store (size rec is genuinely free). B2C: credit packs in-app. Resell mode uses Shopify's native checkout + order webhook.
+3. **Dual Billing** — B2B: subscriptions + PAYG on WearOn's own platform via Paddle (not Shopify Billing API). Plugin listed as free on Shopify App Store (size rec is genuinely free). B2C: credit packs in-app. Resell mode uses Shopify's native checkout + order webhook.
 
 4. **Plugin Isolation** — Plugin is a separate repo (wearon-shopify) using Shopify's official React Router template. Theme app extension embeds storefront UI on merchant product pages. Must not leak CSS/JS into host page.
 
@@ -93,7 +93,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 
 **ADR-4: Shared Generation Pipeline** — Single Python worker replaces the existing TypeScript BullMQ worker. Handles both B2B and B2C generation. Simple Redis queue (LPUSH/BRPOP) for cross-language communication — Celery used only on Python side for retries and rate limiting. Next.js API deducts credits atomically before queueing, then pushes plain JSON task to Redis. Python worker consumes tasks, calls OpenAI, writes results to Supabase, and handles refunds on failure. Channel-aware task data (channel, store_id or user_id). Two-layer rate limiting: API middleware (per-store tier + per-shopper email) + worker (global OpenAI).
 
-**ADR-5: Billing — Free Connector App Pattern** — Plugin is free on Shopify App Store. Size rec works immediately for all visitors (no login needed). Virtual try-on requires store account login. Merchant billing: subscription + PAYG on WearOn platform (payment provider TBD — Stripe will NOT be used). No Shopify Billing API, no 20% rev share. Fallback: add Shopify Billing API if App Store review rejects this approach.
+**ADR-5: Billing — Free Connector App Pattern** — Plugin is free on Shopify App Store. Size rec works immediately for all visitors (no login needed). Virtual try-on requires store account login. Merchant billing: subscription + PAYG on WearOn platform via Paddle. No Shopify Billing API, no 20% rev share. Fallback: add Shopify Billing API if App Store review rejects this approach.
 
 **FP-1: Size Rec on Python Worker (MVP)** — MediaPipe pose estimation runs on the persistent Python worker process (DigitalOcean). 33 3D body landmarks for accurate size recommendations. Worker runs two interfaces: FastAPI HTTP server for synchronous size rec requests (<1s), Celery worker for async generation jobs. Model loads once on startup, stays warm.
 
@@ -149,7 +149,7 @@ No starter template. Direct package integration for Shopify support:
 - @shopify/shopify-api added to packages/api for OAuth, webhooks, Admin API
 - B2B REST API routes at /api/v1/* in apps/next/
 - Webhook endpoints at /api/v1/webhooks/shopify/ in apps/next/
-- Merchant onboarding + billing pages in apps/next/ (payment provider TBD)
+- Merchant onboarding + billing pages in apps/next/ (Paddle integration)
 
 ### WearOn Shopify Plugin (New Separate Repo)
 
@@ -437,14 +437,14 @@ shopify app init --template reactRouter
 6. Submit skeleton Shopify app for early App Store review (OAuth + empty admin page + basic theme extension — validates billing model before building)
 7. Shopify OAuth + merchant onboarding flow
 8. Plugin storefront UI (theme app extension) — absorb mode only for MVP
-9. Billing integration (payment provider TBD on WearOn platform)
+9. Billing integration (Paddle on WearOn platform)
 10. Resell mode (Phase 2 — webhook + shopper credits + hidden products)
 
 **Cross-Component Dependencies:**
 - Python worker depends on: Supabase (tables + service role key), Redis (Celery broker), OpenAI API, MediaPipe (pose estimation)
 - B2B REST API depends on: Supabase (store_api_keys for auth), Redis (rate limiting + task pushing)
 - Shopify plugin depends on: B2B REST API (all operations), Shopify Admin API (hidden products, webhooks)
-- Billing depends on: stores table (subscription tier), payment provider API (TBD)
+- Billing depends on: stores table (subscription tier), Paddle API
 - Resell mode depends on: Shopify webhooks, store_shopper_credits table, B2B REST API
 
 ## Implementation Patterns & Consistency Rules
@@ -886,7 +886,7 @@ wearon-worker/
 | WearOn API → FastAPI | /api/v1/size-rec → wearon-worker | HTTP proxy | Internal network |
 | Shopify → Webhooks | Shopify → /api/v1/webhooks/ | HTTPS POST | HMAC-SHA256 |
 | Merchant → WearOn Platform | Browser → apps/next/(merchant) | Next.js pages | Supabase Auth |
-| Merchant → Payment Provider | WearOn platform → Payment API (TBD) | HTTPS | Provider secret key |
+| Merchant → Payment Provider | WearOn platform → Paddle API | HTTPS | Provider secret key |
 
 **Data Boundaries:**
 
@@ -972,7 +972,7 @@ wearon-worker/
 | Store Management | /api/v1/stores/, middleware, migrations 005 | COVERED |
 | Plugin UI | extensions/wearon-tryon/ (Preact/vanilla JS) | COVERED |
 | Authentication (B2B) | API key middleware, Shopify OAuth, HMAC webhooks | COVERED |
-| Credit & Billing | /api/v1/credits/, payment provider (TBD), RPC functions, resell mode tables | COVERED |
+| Credit & Billing | /api/v1/credits/, Paddle billing, RPC functions, resell mode tables | COVERED |
 | Generation Pipeline | Redis queue, Python worker, OpenAI, channel-aware routing | COVERED |
 | Size Recommendation | FastAPI + MediaPipe on worker, Next.js proxy | COVERED |
 | Analytics | Extended analytics router, separate B2B/B2C event tables | COVERED |
@@ -1123,7 +1123,7 @@ wearon-worker/
 6. Submit skeleton Shopify app for early App Store review
 7. Shopify OAuth + merchant onboarding flow
 8. Plugin storefront UI (theme app extension) — absorb mode only
-9. Billing integration (payment provider TBD on WearOn platform)
+9. Billing integration (Paddle on WearOn platform)
 10. Resell mode (Phase 2)
 
 ---

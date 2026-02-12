@@ -145,10 +145,10 @@ export function MerchantOnboarding() {
             >
               <YStack gap="$2" alignItems="center">
                 <Text color="$color10" fontSize="$4" textAlign="center">
-                  Payment setup will be available after Stripe integration is configured.
+                  Payment setup is handled by Paddle. You can finish this from the Billing page.
                 </Text>
                 <Text color="$color8" fontSize="$2" textAlign="center">
-                  You can skip this step for now and set up billing later from the dashboard.
+                  You can skip this step for now and configure billing later from merchant billing.
                 </Text>
               </YStack>
             </Card>

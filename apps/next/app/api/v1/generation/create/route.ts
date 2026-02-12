@@ -1,7 +1,13 @@
 import crypto from 'node:crypto'
 import { withB2BAuth } from '../../../../../../packages/api/src/middleware/b2b'
 import { createChildLogger } from '../../../../../../packages/api/src/logger'
-import { deductStoreCredit, refundStoreCredit } from '../../../../../../packages/api/src/services/b2b-credits'
+import {
+  deductStoreCredit,
+  getStoreBillingProfile,
+  logStoreOverage,
+  refundStoreCredit,
+} from '../../../../../../packages/api/src/services/b2b-credits'
+import { createOverageCharge, getTierOverageCents } from '../../../../../../packages/api/src/services/paddle'
 import { pushGenerationTask } from '../../../../../../packages/api/src/services/redis-queue'
 import { successResponse, errorResponse } from '../../../../../../packages/api/src/utils/b2b-response'
 import { TASK_PAYLOAD_VERSION } from '../../../../../../packages/api/src/types/queue'
@@ -73,12 +79,34 @@ export const POST = withB2BAuth(async (request, context) => {
 
   // Deduct 1 credit
   let creditDeducted = false
+  let overagePlan:
+    | {
+        subscriptionId: string
+        tier: 'starter' | 'growth' | 'scale'
+      }
+    | null = null
+  let overageChargeId: string | null = null
+
   try {
     const success = await deductStoreCredit(context.storeId, context.requestId, 'B2B generation')
-    if (!success) {
-      return errorResponse('INSUFFICIENT_CREDITS', 'Insufficient credits to create generation', 402)
+    if (success) {
+      creditDeducted = true
+    } else {
+      const billingProfile = await getStoreBillingProfile(context.storeId)
+      const hasActiveSubscription =
+        billingProfile.subscriptionStatus === null ||
+        billingProfile.subscriptionStatus === 'active' ||
+        billingProfile.subscriptionStatus === 'trialing'
+
+      if (billingProfile.subscriptionTier && billingProfile.subscriptionId && hasActiveSubscription) {
+        overagePlan = {
+          subscriptionId: billingProfile.subscriptionId,
+          tier: billingProfile.subscriptionTier,
+        }
+      } else {
+        return errorResponse('INSUFFICIENT_CREDITS', 'Insufficient credits to create generation', 402)
+      }
     }
-    creditDeducted = true
   } catch (err) {
     log.error({ err }, '[B2B Generation] Credit deduction failed')
     return errorResponse('INTERNAL_ERROR', 'Failed to process credit deduction', 500)
@@ -113,6 +141,38 @@ export const POST = withB2BAuth(async (request, context) => {
     return errorResponse('INTERNAL_ERROR', 'Failed to create generation session', 500)
   }
 
+  // For subscribed stores with 0 credits, bill one overage unit before queueing.
+  if (overagePlan) {
+    try {
+      overageChargeId = await createOverageCharge({
+        subscriptionId: overagePlan.subscriptionId,
+        tier: overagePlan.tier,
+        storeId: context.storeId,
+        sessionId: session.id as string,
+        requestId: context.requestId,
+      })
+
+      const overageCents = getTierOverageCents(overagePlan.tier)
+      await logStoreOverage(
+        context.storeId,
+        context.requestId,
+        `Overage charge (${overagePlan.tier}) billed at ${overageCents} cents via Paddle charge ${overageChargeId}`,
+      )
+    } catch (overageErr) {
+      log.error(
+        { err: overageErr, storeId: context.storeId, sessionId: session.id },
+        '[B2B Generation] Overage billing failed',
+      )
+
+      await supabase
+        .from('store_generation_sessions')
+        .update({ status: 'failed', error_message: 'Failed to bill overage for generation request' })
+        .eq('id', session.id)
+
+      return errorResponse('SERVICE_UNAVAILABLE', 'Overage billing temporarily unavailable', 503)
+    }
+  }
+
   // Push to Redis queue
   const taskPayload: GenerationTaskPayload = {
     taskId: crypto.randomUUID(),
@@ -132,10 +192,17 @@ export const POST = withB2BAuth(async (request, context) => {
     log.error({ err: queueErr }, '[B2B Generation] Queue push failed')
 
     // Refund credit and mark session failed
-    try {
-      await refundStoreCredit(context.storeId, context.requestId, 'Queue failure - refund')
-    } catch (refundErr) {
-      log.error({ err: refundErr }, '[B2B Generation] Refund after queue failure also failed')
+    if (creditDeducted) {
+      try {
+        await refundStoreCredit(context.storeId, context.requestId, 'Queue failure - refund')
+      } catch (refundErr) {
+        log.error({ err: refundErr }, '[B2B Generation] Refund after queue failure also failed')
+      }
+    } else if (overageChargeId) {
+      log.warn(
+        { overageChargeId, sessionId: session.id },
+        '[B2B Generation] Queue failed after overage charge. Manual reconciliation may be required',
+      )
     }
 
     await supabase

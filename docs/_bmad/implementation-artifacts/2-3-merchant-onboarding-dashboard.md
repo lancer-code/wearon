@@ -1,6 +1,6 @@
 # Story 2.3: Merchant Onboarding & Dashboard
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -25,7 +25,7 @@ so that **I can get started quickly and manage my WearOn integration**.
 
 - [x] Task 2: Create onboarding flow (AC: #1)
   - [x] 2.1 Step 1: Confirm store details (shop domain, store name). Pre-filled from Shopify OAuth data.
-  - [x] 2.2 Step 2: Add payment method. Placeholder — payment provider TBD, deferred to Story 3.2.
+  - [x] 2.2 Step 2: Add payment method. Placeholder that routes merchants to Paddle billing setup in Story 3.2.
   - [x] 2.3 Step 3: Review plugin status. Show API key (full, one-time display from OAuth redirect), installation instructions.
   - [x] 2.4 On completion, set `stores.onboarding_completed = true` via `merchant.completeOnboarding` mutation.
 
@@ -43,6 +43,11 @@ so that **I can get started quickly and manage my WearOn integration**.
   - [x] 5.2 Test API key regeneration invalidates old key and creates new one.
   - [x] 5.3 Test masked key display never reveals full key.
 
+### Review Follow-ups (AI)
+
+- [ ] [AI-Review][HIGH] Story File List cannot be verified against current git working tree (no uncommitted/staged evidence for listed files); validate against commit/PR history before marking done. [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:114]
+- [ ] [AI-Review][MEDIUM] Current workspace has undocumented changes outside this story (`packages/api/package.json`, `packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`, `supabase/migrations/008_paddle_billing_schema.sql`) and traceability is incomplete for this story review. [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:114]
+- [ ] [AI-Review][LOW] Dev Agent Record is missing immutable traceability for independent verification (commit SHA/PR link and exact test command output). [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:87]
 ## Dev Notes
 
 ### Architecture Requirements
@@ -55,7 +60,7 @@ so that **I can get started quickly and manage my WearOn integration**.
 
 - Story 2.2: OAuth creates the store record and initial API key.
 - Story 1.1: Database tables.
-- Payment provider TBD — payment method setup deferred to Story 3.2.
+- Payment provider: Paddle — full payment setup implemented in Story 3.2.
 
 ### Existing Patterns
 
@@ -98,7 +103,7 @@ Claude Opus 4.6
 - Merchant router uses `protectedProcedure` with `adminSupabase` for store lookups via `owner_user_id` (from Story 2.2)
 - API key masking: shows first 8 chars of key hash as `wk_xxxxxxxx...****` — never reveals full key
 - API key regeneration: deactivates all old keys, generates new wk_ key, SHA-256 hashes, stores, returns plaintext ONCE
-- Onboarding Step 2 (payment method) shows placeholder since payment provider is TBD (deferred to Story 3.2)
+- Onboarding Step 2 (payment method) remains a lightweight placeholder and points to Billing page for Paddle setup.
 - Onboarding Step 3 displays full API key from OAuth redirect URL params (one-time display)
 - Dashboard includes: store overview cards, masked API key with show/hide/copy/regenerate, store configuration details
 - Route protection added to `proxy.ts` for `/merchant/*` — requires Supabase Auth
@@ -108,7 +113,7 @@ Claude Opus 4.6
 | Change | Reason |
 |--------|--------|
 | Used `/merchant/` URL path instead of `(merchant)` route group | Story 2.2 OAuth callback redirects to `/merchant/onboarding` — using route group would produce `/onboarding` URL, breaking the redirect |
-| Payment step shows placeholder | Payment provider is TBD (Story 3.2 on-hold). Step shows "skip for now" message |
+| Payment step shows placeholder | Story 3.2 implements Paddle billing on dedicated `/merchant/billing` page; onboarding keeps this step lightweight |
 | Added `getCreditBalance` and `completeOnboarding` endpoints | Required by dashboard and onboarding UI but not explicitly listed as separate tasks — natural extensions of Tasks 3 and 4 |
 
 ### File List

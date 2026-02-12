@@ -57,13 +57,13 @@ so that **I can track business health, margins, and generation quality**.
 - B2B revenue: sum of `store_credit_transactions` WHERE `type = 'purchase'`.
 - B2C revenue: sum of `credit_transactions` WHERE `type = 'purchase'`.
 - OpenAI costs: generation count * configurable rate (stored in admin settings or env var).
-- This is an estimate — exact revenue tracking depends on payment provider (TBD).
+- This is an estimate — exact revenue tracking depends on Paddle webhook-backed transaction data.
 
 ### Dependencies
 
 - Story 7.1: `store_analytics_events` for event-based metrics.
 - Story 7.2: Admin panel infrastructure (sidebar, layout).
-- Story 3.2: Payment integration — on-hold, payment provider TBD (credit purchases recorded in transaction tables).
+- Story 3.2: Payment integration — Paddle billing/webhook flow (credit purchases recorded in transaction tables).
 - Existing B2C tables: `generation_sessions`, `credit_transactions`.
 
 ### References

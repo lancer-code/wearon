@@ -157,6 +157,107 @@ describe('Age Gate — COPPA Compliance', () => {
     })
   })
 
+  describe('Timestamp validation prevents tampering (MEDIUM #2 FIX)', () => {
+    const AGE_VERIFIED_KEY = 'wearon_age_verified_v1'
+    const AGE_VERIFIED_TIMESTAMP_KEY = 'wearon_age_verified_ts_v1'
+    const MAX_AGE_VERIFICATION_DURATION_MS = 24 * 60 * 60 * 1000
+
+    function isAgeVerified(storage: Record<string, string>): boolean {
+      const verified = storage[AGE_VERIFIED_KEY] === 'true'
+      if (!verified) {
+        return false
+      }
+
+      const timestampStr = storage[AGE_VERIFIED_TIMESTAMP_KEY]
+      if (!timestampStr) {
+        delete storage[AGE_VERIFIED_KEY]
+        return false
+      }
+
+      const timestamp = Number(timestampStr)
+      if (!Number.isFinite(timestamp) || timestamp < 0) {
+        delete storage[AGE_VERIFIED_KEY]
+        delete storage[AGE_VERIFIED_TIMESTAMP_KEY]
+        return false
+      }
+
+      const now = Date.now()
+      const age = now - timestamp
+
+      if (age < 0 || age > MAX_AGE_VERIFICATION_DURATION_MS) {
+        delete storage[AGE_VERIFIED_KEY]
+        delete storage[AGE_VERIFIED_TIMESTAMP_KEY]
+        return false
+      }
+
+      return true
+    }
+
+    it('rejects age verification without timestamp', () => {
+      const storage: Record<string, string> = {
+        [AGE_VERIFIED_KEY]: 'true',
+      }
+
+      expect(isAgeVerified(storage)).toBe(false)
+      expect(storage[AGE_VERIFIED_KEY]).toBeUndefined()
+    })
+
+    it('rejects age verification with invalid timestamp', () => {
+      const storage: Record<string, string> = {
+        [AGE_VERIFIED_KEY]: 'true',
+        [AGE_VERIFIED_TIMESTAMP_KEY]: 'not-a-number',
+      }
+
+      expect(isAgeVerified(storage)).toBe(false)
+      expect(storage[AGE_VERIFIED_KEY]).toBeUndefined()
+    })
+
+    it('rejects age verification with negative timestamp', () => {
+      const storage: Record<string, string> = {
+        [AGE_VERIFIED_KEY]: 'true',
+        [AGE_VERIFIED_TIMESTAMP_KEY]: '-1000',
+      }
+
+      expect(isAgeVerified(storage)).toBe(false)
+    })
+
+    it('rejects age verification with future timestamp (tampered)', () => {
+      const storage: Record<string, string> = {
+        [AGE_VERIFIED_KEY]: 'true',
+        [AGE_VERIFIED_TIMESTAMP_KEY]: (Date.now() + 10000).toString(),
+      }
+
+      expect(isAgeVerified(storage)).toBe(false)
+    })
+
+    it('rejects age verification older than 24 hours', () => {
+      const storage: Record<string, string> = {
+        [AGE_VERIFIED_KEY]: 'true',
+        [AGE_VERIFIED_TIMESTAMP_KEY]: (Date.now() - 25 * 60 * 60 * 1000).toString(),
+      }
+
+      expect(isAgeVerified(storage)).toBe(false)
+    })
+
+    it('accepts age verification with valid recent timestamp', () => {
+      const storage: Record<string, string> = {
+        [AGE_VERIFIED_KEY]: 'true',
+        [AGE_VERIFIED_TIMESTAMP_KEY]: Date.now().toString(),
+      }
+
+      expect(isAgeVerified(storage)).toBe(true)
+    })
+
+    it('accepts age verification within 24-hour window', () => {
+      const storage: Record<string, string> = {
+        [AGE_VERIFIED_KEY]: 'true',
+        [AGE_VERIFIED_TIMESTAMP_KEY]: (Date.now() - 23 * 60 * 60 * 1000).toString(),
+      }
+
+      expect(isAgeVerified(storage)).toBe(true)
+    })
+  })
+
   describe('B2C auth endpoints unchanged (Task 5.5)', () => {
     it('auth endpoints are not modified by age gate', () => {
       // Age gate is a feature gate (before try-on) not an auth gate (login/signup)

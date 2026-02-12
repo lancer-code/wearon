@@ -27,7 +27,7 @@ describe('authenticateApiKey', () => {
 
   it('returns 401 for missing Authorization header', async () => {
     const request = new Request('https://example.com/api/v1/health')
-    const result = await authenticateApiKey(request)
+    const result = await authenticateApiKey(request, 'req_test_1')
 
     expect('error' in result).toBe(true)
     if ('error' in result) {
@@ -41,7 +41,7 @@ describe('authenticateApiKey', () => {
     const request = new Request('https://example.com/api/v1/health', {
       headers: { Authorization: 'Bearer invalid_key_format' },
     })
-    const result = await authenticateApiKey(request)
+    const result = await authenticateApiKey(request, 'req_test_2')
 
     expect('error' in result).toBe(true)
     if ('error' in result) {
@@ -56,7 +56,7 @@ describe('authenticateApiKey', () => {
     const request = new Request('https://example.com/api/v1/health', {
       headers: { Authorization: 'Bearer wk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4' },
     })
-    const result = await authenticateApiKey(request)
+    const result = await authenticateApiKey(request, 'req_test_3')
 
     expect('error' in result).toBe(true)
     if ('error' in result) {
@@ -82,7 +82,7 @@ describe('authenticateApiKey', () => {
     const request = new Request('https://example.com/api/v1/health', {
       headers: { Authorization: 'Bearer wk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4' },
     })
-    const result = await authenticateApiKey(request)
+    const result = await authenticateApiKey(request, 'req_test_4')
 
     expect('error' in result).toBe(true)
     if ('error' in result) {
@@ -106,10 +106,11 @@ describe('authenticateApiKey', () => {
     })
 
     const apiKey = 'wk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4'
+    const requestId = 'req_test_5'
     const request = new Request('https://example.com/api/v1/health', {
       headers: { Authorization: `Bearer ${apiKey}` },
     })
-    const result = await authenticateApiKey(request)
+    const result = await authenticateApiKey(request, requestId)
 
     expect('context' in result).toBe(true)
     if ('context' in result) {
@@ -117,7 +118,7 @@ describe('authenticateApiKey', () => {
       expect(result.context.shopDomain).toBe('test.myshopify.com')
       expect(result.context.subscriptionTier).toBe('growth')
       expect(result.context.isActive).toBe(true)
-      expect(result.context.requestId).toMatch(/^req_/)
+      expect(result.context.requestId).toBe(requestId)
     }
 
     // Verify the hash was computed correctly

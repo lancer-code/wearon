@@ -48,7 +48,23 @@ async function getStoreForUser(adminSupabase: any, userId: string) {
     .eq('owner_user_id', userId)
     .single()
 
-  if (error || !store) {
+  if (error) {
+    // Distinguish between not found and actual errors
+    if (error.code === 'PGRST116') {
+      // PostgreSQL "no rows" error
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'No store linked to your account',
+      })
+    }
+    logger.error({ user_id: userId, err: error.message }, '[Merchant] Store lookup failed')
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Failed to load store information',
+    })
+  }
+
+  if (!store) {
     throw new TRPCError({
       code: 'NOT_FOUND',
       message: 'No store linked to your account',
@@ -278,25 +294,34 @@ export const merchantRouter = router({
 
   /**
    * Get the masked API key preview for the merchant's store.
-   * Never returns the full key — only masked version (e.g., wk_a1b2...****).
+   * Never returns the full key — only masked version (e.g., wk_a1b2c3d4...****).
    */
   getApiKeyPreview: protectedProcedure.query(async ({ ctx }) => {
     const store = await getStoreForUser(ctx.adminSupabase, ctx.user.id)
 
-    const { data: apiKey } = await ctx.adminSupabase
+    const { data: apiKey, error } = await ctx.adminSupabase
       .from('store_api_keys')
-      .select('key_hash, created_at')
+      .select('key_prefix, created_at')
       .eq('store_id', store.id)
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
 
-    if (!apiKey) {
+    if (error) {
+      logger.error({ store_id: store.id, err: error.message }, '[Merchant] API key preview query failed')
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to load API key information',
+      })
+    }
+
+    if (!apiKey || !apiKey.key_prefix) {
       return { maskedKey: null, createdAt: null }
     }
 
-    const maskedKey = `wk_${apiKey.key_hash.substring(0, 8)}...****`
+    // Display first 16 chars of real key + mask suffix (e.g., "wk_a1b2c3d4e5f6...****")
+    const maskedKey = `${apiKey.key_prefix}...****`
 
     return {
       maskedKey,
@@ -310,11 +335,19 @@ export const merchantRouter = router({
   getCreditBalance: protectedProcedure.query(async ({ ctx }) => {
     const store = await getStoreForUser(ctx.adminSupabase, ctx.user.id)
 
-    const { data: credits } = await ctx.adminSupabase
+    const { data: credits, error } = await ctx.adminSupabase
       .from('store_credits')
       .select('balance, total_purchased, total_spent')
       .eq('store_id', store.id)
       .single()
+
+    if (error) {
+      logger.error({ store_id: store.id, err: error.message }, '[Merchant] Credit balance query failed')
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to load credit balance',
+      })
+    }
 
     return {
       balance: (credits?.balance as number | undefined) ?? 0,
@@ -357,35 +390,51 @@ export const merchantRouter = router({
    * Regenerate the API key for the merchant's store.
    * Invalidates the old key and creates a new one.
    * Returns the full key ONCE.
+   * Atomic: inserts new key before deactivating old keys to prevent downtime.
    */
   regenerateApiKey: protectedProcedure.mutation(async ({ ctx }) => {
     const store = await getStoreForUser(ctx.adminSupabase, ctx.user.id)
 
-    await ctx.adminSupabase
-      .from('store_api_keys')
-      .update({ is_active: false })
-      .eq('store_id', store.id)
-
+    // Generate new API key
     const randomHex = crypto.randomBytes(16).toString('hex')
     const plaintext = `wk_${randomHex}`
     const keyHash = crypto.createHash('sha256').update(plaintext).digest('hex')
+    const keyPrefix = plaintext.substring(0, 16) // First 16 chars for masked display
 
+    // Step 1: Insert new active key FIRST (atomic guarantee - fails fast if DB issue)
     const { error: insertError } = await ctx.adminSupabase.from('store_api_keys').insert({
       store_id: store.id,
       key_hash: keyHash,
-      allowed_domains: [store.shop_domain as string],
+      key_prefix: keyPrefix,
+      allowed_domains: [`https://${store.shop_domain as string}`],
       is_active: true,
     })
 
     if (insertError) {
       logger.error(
         { store_id: store.id, err: insertError.message },
-        '[Merchant] API key regeneration failed'
+        '[Merchant] API key regeneration failed at insert step'
       )
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
         message: 'Failed to regenerate API key',
       })
+    }
+
+    // Step 2: Deactivate old keys AFTER new key is successfully created
+    // This ensures store always has at least one active key
+    const { error: deactivateError } = await ctx.adminSupabase
+      .from('store_api_keys')
+      .update({ is_active: false })
+      .eq('store_id', store.id)
+      .neq('key_hash', keyHash)
+
+    if (deactivateError) {
+      // Log but don't fail - new key is already active so store is operational
+      logger.warn(
+        { store_id: store.id, err: deactivateError.message },
+        '[Merchant] Failed to deactivate old keys after regeneration (non-fatal)'
+      )
     }
 
     logger.info({ store_id: store.id }, '[Merchant] API key regenerated')

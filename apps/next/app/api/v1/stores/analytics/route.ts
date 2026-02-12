@@ -45,10 +45,14 @@ export async function handleGetAnalytics(request: Request, context: B2BContext) 
   }
 
   // Query generation sessions for stats
+  // MEDIUM #1 FIX: Limit results to prevent memory exhaustion with large datasets
+  const MAX_SESSIONS_FOR_STATS = 10000
+
   let generationQuery = supabase
     .from('store_generation_sessions')
     .select('status')
     .eq('store_id', context.storeId)
+    .limit(MAX_SESSIONS_FOR_STATS)
 
   if (startDate) {
     generationQuery = generationQuery.gte('created_at', startDate)
@@ -87,13 +91,14 @@ export async function handleGetAnalytics(request: Request, context: B2BContext) 
     return errorResponse('INTERNAL_ERROR', 'Failed to retrieve credit data', 500)
   }
 
+  // LOW #2 FIX: Use snake_case for B2B API contract consistency
   return successResponse({
-    totalGenerations,
-    completedGenerations,
-    failedGenerations,
-    successRate,
-    creditsRemaining: credits?.balance ?? 0,
-    creditsUsed: credits?.total_spent ?? 0,
+    total_generations: totalGenerations,
+    completed_generations: completedGenerations,
+    failed_generations: failedGenerations,
+    success_rate: successRate,
+    credits_remaining: credits?.balance ?? 0,
+    credits_used: credits?.total_spent ?? 0,
   })
 }
 

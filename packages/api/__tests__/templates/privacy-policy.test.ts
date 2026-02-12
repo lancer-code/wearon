@@ -126,4 +126,63 @@ describe('Privacy Policy Templates (Story 8.1)', () => {
       expect(PLUGIN_PRIVACY_DISCLOSURE).toContain('OpenAI')
     })
   })
+
+  describe('Store name sanitization (HIGH #1 FIX + MEDIUM #2 FIX)', () => {
+    it('sanitizes HTML tags to prevent XSS', () => {
+      const xssAttempt = '<script>alert("xss")</script>'
+      const template = getGdprTemplate(xssAttempt)
+      // Should remove all special characters including < > ( ) "
+      expect(template).not.toContain('<script>')
+      expect(template).not.toContain('</script>')
+      expect(template).not.toContain('alert("xss")')
+      // Sanitized text should only contain alphanumeric characters
+      expect(template).toContain('scriptalertxssscript')
+    })
+
+    it('sanitizes event handlers to prevent XSS', () => {
+      const xssAttempt = 'Store<img src=x onerror=alert(1)>'
+      const template = getCcpaTemplate(xssAttempt)
+      // Should remove all special characters
+      expect(template).not.toContain('<img')
+      expect(template).not.toContain('onerror=')
+      expect(template).not.toContain('alert(1)')
+      // Sanitized version keeps only alphanumeric and allowed chars
+      expect(template).toContain('Storeimg srcx onerroralert1')
+    })
+
+    it('rejects store names exceeding max length (100 chars)', () => {
+      const longName = 'A'.repeat(101)
+      const template = getDpaTemplate(longName)
+      expect(template).toContain('{{STORE_NAME}}') // Falls back to placeholder
+      expect(template).not.toContain('AAAAAAAAAA')
+    })
+
+    it('accepts valid store names with allowed characters', () => {
+      const validName = 'My-Store_Name.123'
+      const template = getGdprTemplate(validName)
+      expect(template).toContain('My-Store_Name.123')
+      expect(template).not.toContain('{{STORE_NAME}}')
+    })
+
+    it('handles empty string gracefully', () => {
+      const template = getCcpaTemplate('')
+      expect(template).toContain('{{STORE_NAME}}')
+    })
+
+    it('handles null gracefully', () => {
+      const template = getDpaTemplate(null as any)
+      expect(template).toContain('{{STORE_NAME}}')
+    })
+
+    it('handles non-string input gracefully', () => {
+      const template = getGdprTemplate({ toString: () => '<evil>' } as any)
+      expect(template).toContain('{{STORE_NAME}}')
+    })
+
+    it('trims whitespace from store names', () => {
+      const template = getCcpaTemplate('  My Store  ')
+      expect(template).toContain('My Store')
+      expect(template).not.toContain('  My Store  ')
+    })
+  })
 })

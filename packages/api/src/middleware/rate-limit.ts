@@ -46,37 +46,76 @@ export async function checkRateLimit(
 ): Promise<{ allowed: true; headers: RateLimitHeaders } | { allowed: false; response: NextResponse }> {
   const tierKey = subscriptionTier ?? 'default'
   const tier = RATE_LIMIT_TIERS[tierKey] ?? RATE_LIMIT_TIERS['default']!
-  const limit = tier.maxRequestsPerMinute
+  const minuteLimit = tier.maxRequestsPerMinute
+  const hourLimit = tier.maxRequestsPerHour
 
-  const minuteWindow = Math.floor(Date.now() / 60000)
-  const key = `ratelimit:store:${storeId}:${minuteWindow}`
-  const windowResetTimestamp = (minuteWindow + 1) * 60
+  const now = Date.now()
+  const minuteWindow = Math.floor(now / 60000)
+  const hourWindow = Math.floor(now / 3600000)
+  const minuteKey = `ratelimit:store:${storeId}:minute:${minuteWindow}`
+  const hourKey = `ratelimit:store:${storeId}:hour:${hourWindow}`
+  const minuteResetTimestamp = (minuteWindow + 1) * 60
+  const hourResetTimestamp = (hourWindow + 1) * 3600
 
   try {
     const redis = getRedisClient()
-    const count = await redis.incr(key)
 
-    if (count === 1) {
-      await redis.expire(key, 120)
+    // Check both minute and hour windows atomically via pipeline
+    const pipeline = redis.pipeline()
+    pipeline.incr(minuteKey)
+    pipeline.incr(hourKey)
+    const results = await pipeline.exec()
+
+    if (!results) {
+      throw new Error('Pipeline execution failed')
     }
 
-    if (count > limit) {
+    const minuteCount = (results[0]?.[1] as number) ?? 0
+    const hourCount = (results[1]?.[1] as number) ?? 0
+
+    // Set expiry on first increment for each window
+    if (minuteCount === 1) {
+      await redis.expire(minuteKey, 120) // 2 minutes TTL
+    }
+    if (hourCount === 1) {
+      await redis.expire(hourKey, 7200) // 2 hours TTL
+    }
+
+    // Check minute limit
+    if (minuteCount > minuteLimit) {
       return {
         allowed: false,
-        response: rateLimitResponse('RATE_LIMIT_EXCEEDED', 'Store rate limit exceeded. Try again later.', {
-          limit,
+        response: rateLimitResponse(
+          'RATE_LIMIT_EXCEEDED',
+          'Per-minute rate limit exceeded. Try again later.',
+          {
+            limit: minuteLimit,
+            remaining: 0,
+            reset: minuteResetTimestamp,
+          },
+        ),
+      }
+    }
+
+    // Check hour limit
+    if (hourCount > hourLimit) {
+      return {
+        allowed: false,
+        response: rateLimitResponse('RATE_LIMIT_EXCEEDED', 'Hourly rate limit exceeded. Try again later.', {
+          limit: hourLimit,
           remaining: 0,
-          reset: windowResetTimestamp,
+          reset: hourResetTimestamp,
         }),
       }
     }
 
+    // Return minute-based headers (primary limit for user feedback)
     return {
       allowed: true,
       headers: {
-        limit,
-        remaining: limit - count,
-        reset: windowResetTimestamp,
+        limit: minuteLimit,
+        remaining: minuteLimit - minuteCount,
+        reset: minuteResetTimestamp,
       },
     }
   } catch (err) {
@@ -85,9 +124,9 @@ export async function checkRateLimit(
     return {
       allowed: true,
       headers: {
-        limit,
-        remaining: limit,
-        reset: windowResetTimestamp,
+        limit: minuteLimit,
+        remaining: minuteLimit,
+        reset: minuteResetTimestamp,
       },
     }
   }

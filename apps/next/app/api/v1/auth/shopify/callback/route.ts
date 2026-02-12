@@ -23,9 +23,16 @@ async function linkSupabaseUser(
     return
   }
 
-  // Check if Supabase auth user already exists with this email
-  const { data: existingUsers } = await supabase.auth.admin.listUsers()
-  const existingUser = existingUsers?.users?.find((u) => u.email === ownerEmail)
+  // Check if Supabase auth user already exists with this email (use getUsersByEmail for scalability)
+  const { data: { users: existingUsers } = { users: [] }, error: lookupError } =
+    await supabase.auth.admin.listUsers({ filters: `email eq "${ownerEmail}"` })
+
+  if (lookupError) {
+    logger.error({ err: lookupError.message, shop: shopDomain }, '[Shopify OAuth] User lookup failed')
+    return
+  }
+
+  const existingUser = existingUsers?.[0]
 
   let userId: string
 
@@ -50,19 +57,25 @@ async function linkSupabaseUser(
   }
 
   // Link store to Supabase user
-  await supabase
+  const { error: linkError } = await supabase
     .from('stores')
     .update({ owner_user_id: userId })
     .eq('id', storeId)
 
+  if (linkError) {
+    logger.error({ err: linkError.message, storeId, userId }, '[Shopify OAuth] Failed to link user to store')
+    return
+  }
+
   logger.info({ storeId, userId, shop: shopDomain }, '[Shopify OAuth] Supabase user linked to store')
 }
 
-function generateApiKey(): { plaintext: string; hash: string } {
+function generateApiKey(): { plaintext: string; hash: string; prefix: string } {
   const randomHex = crypto.randomBytes(16).toString('hex')
   const plaintext = `wk_${randomHex}`
   const hash = crypto.createHash('sha256').update(plaintext).digest('hex')
-  return { plaintext, hash }
+  const prefix = plaintext.substring(0, 16) // First 16 chars for masked display
+  return { plaintext, hash, prefix }
 }
 
 export async function GET(request: Request) {
@@ -121,6 +134,25 @@ export async function GET(request: Request) {
         .update({ is_active: true })
         .eq('store_id', existingStore.id)
 
+      // Backfill missing API key if none exist (fixes partial-failure installations)
+      const { data: existingKeys } = await supabase
+        .from('store_api_keys')
+        .select('id')
+        .eq('store_id', existingStore.id)
+        .limit(1)
+
+      if (!existingKeys || existingKeys.length === 0) {
+        const apiKey = generateApiKey()
+        await supabase.from('store_api_keys').insert({
+          store_id: existingStore.id,
+          key_hash: apiKey.hash,
+          key_prefix: apiKey.prefix,
+          allowed_domains: [`https://${shopDomain}`],
+          is_active: true,
+        })
+        logger.info({ storeId: existingStore.id }, '[Shopify OAuth] Backfilled missing API key on re-install')
+      }
+
       storeId = existingStore.id
       logger.info({ storeId, shop: shopDomain }, '[Shopify OAuth] Store re-activated')
 
@@ -155,6 +187,7 @@ export async function GET(request: Request) {
       const { error: keyError } = await supabase.from('store_api_keys').insert({
         store_id: storeId,
         key_hash: apiKey.hash,
+        key_prefix: apiKey.prefix,
         allowed_domains: [`https://${shopDomain}`], // CORS origin format with scheme
         is_active: true,
       })
@@ -175,11 +208,11 @@ export async function GET(request: Request) {
       // Link Supabase Auth user to store
       await linkSupabaseUser(supabase, shopDomain, accessToken, storeId)
 
-      // Store the plaintext API key temporarily in session for onboarding display
-      // This is the ONLY time the plaintext key is available
+      // SECURITY: Never pass API key in URL (exposes via browser history, logs, referrers)
+      // Merchant can regenerate API key from dashboard if needed
       const redirectUrl = new URL('/merchant/onboarding', process.env.SHOPIFY_APP_URL || request.url)
       redirectUrl.searchParams.set('store_id', storeId)
-      redirectUrl.searchParams.set('api_key', apiKey.plaintext)
+      redirectUrl.searchParams.set('new_install', 'true')
 
       return NextResponse.redirect(redirectUrl.toString())
     }

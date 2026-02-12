@@ -47,6 +47,11 @@ so that **I can track ROI and optimize my try-on investment**.
 - [x] [AI-Review][MEDIUM] Query params `start_date` and `end_date` accept any string value without ISO 8601 validation, allowing invalid dates (e.g., "not-a-date") to be passed directly to database `gte()`/`lte()` operations, potentially causing Postgres errors or unexpected query behavior. [apps/next/app/api/v1/stores/analytics/route.ts:31-44] **FIXED 2026-02-13**: Added `isValidISO8601()` validation function that checks date validity and format. Both date params are now validated before database queries, returning 400 with `VALIDATION_ERROR` for invalid dates. Added 2 new tests to verify rejection of invalid date formats.
 - [x] [AI-Review][LOW] Unnecessary `as number` type casts bypass TypeScript's null safety when accessing credit balance and total_spent fields, reducing type safety without providing value since nullish coalescing already handles undefined. [apps/next/app/api/v1/stores/analytics/route.ts:82-83] **FIXED 2026-02-13**: Removed `as number` casts, using direct nullish coalescing `credits?.balance ?? 0` for better type safety.
 
+### Re-Review 2 Follow-ups (2026-02-13)
+
+- [x] [AI-Review][MEDIUM] No pagination on generation sessions query: Selects ALL sessions for store without limit, causing memory exhaustion, slow responses, and potential API crashes for stores with thousands of sessions. [apps/next/app/api/v1/stores/analytics/route.ts:48-60] **FIXED 2026-02-13**: Added `MAX_SESSIONS_FOR_STATS = 10000` limit to prevent unbounded result sets and memory issues.
+- [x] [AI-Review][LOW] Response field naming uses camelCase instead of snake_case: Returns `totalGenerations`, `successRate` etc. violating B2B API snake_case contract per architecture requirements. [apps/next/app/api/v1/stores/analytics/route.ts:91-96] **FIXED 2026-02-13**: Changed all response fields to snake_case (`total_generations`, `success_rate`, `credits_remaining`, `credits_used`).
+
 ## Dev Notes
 
 ### Architecture Requirements

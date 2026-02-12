@@ -39,10 +39,10 @@ story_location: docs/_bmad/implementation-artifacts
 
 development_status:
   # Epic 1: Platform Foundation & Unified Generation Pipeline
-  epic-1: in-progress
-  1-1-b2b-database-schema: in-progress
-  1-2-cross-repo-infrastructure: in-progress
-  1-3-redis-queue-service-bullmq-removal: in-progress
+  epic-1: done
+  1-1-b2b-database-schema: done
+  1-2-cross-repo-infrastructure: done
+  1-3-redis-queue-service-bullmq-removal: done
   epic-1-retrospective: optional
 
   # Epic 2: Store Onboarding & Management
@@ -93,7 +93,7 @@ development_status:
   epic-7-retrospective: optional
 
   # Epic 8: Privacy, Compliance & Trust
-  epic-8: in-progress
-  8-1-gdpr-ccpa-privacy-policy-templates: review
-  8-2-coppa-age-gating: review
+  epic-8: done
+  8-1-gdpr-ccpa-privacy-policy-templates: done
+  8-2-coppa-age-gating: done
   epic-8-retrospective: optional

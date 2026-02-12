@@ -8,8 +8,9 @@ const CORS_HEADERS = {
 }
 
 function isOriginAllowed(origin: string, allowedDomains: string[]): boolean {
+  // Empty allowedDomains means no browser origins permitted (server-to-server only)
   if (allowedDomains.length === 0) {
-    return true
+    return false
   }
   return allowedDomains.includes(origin)
 }

@@ -28,12 +28,17 @@ describe('checkCors', () => {
     expect(result).toBeNull()
   })
 
-  it('allows any origin when allowedDomains is empty', () => {
+  it('rejects any origin when allowedDomains is empty (server-to-server only mode)', async () => {
     const request = new Request('https://example.com/api/v1/health', {
       headers: { origin: 'https://any-site.com' },
     })
     const result = checkCors(request, [])
-    expect(result).toBeNull()
+
+    // Empty allowedDomains means no browser origins permitted (server-to-server only)
+    expect(result).not.toBeNull()
+    const body = await result!.json()
+    expect(result!.status).toBe(403)
+    expect(body.error.code).toBe('DOMAIN_MISMATCH')
   })
 })
 

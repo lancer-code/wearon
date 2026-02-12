@@ -125,10 +125,20 @@ export async function handleGenerationCreatePost(
 
   const { image_urls, prompt, age_verified } = body as Record<string, unknown>
 
+  // MEDIUM #1 FIX + LOW #4 FIX: Log age verification failures for COPPA compliance and provide specific error
   if (age_verified !== true) {
+    log.warn(
+      {
+        storeId: context.storeId,
+        ageVerified: age_verified,
+        event: 'age_verification_failed_b2b',
+      },
+      '[COPPA] B2B shopper failed age verification - generation blocked'
+    )
+
     return errorResponse(
       'AGE_VERIFICATION_REQUIRED',
-      'Age verification is required to use this feature',
+      'You must be 13 or older to use this feature. Age verification is required for COPPA compliance.',
       403
     )
   }

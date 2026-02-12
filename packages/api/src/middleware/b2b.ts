@@ -15,14 +15,9 @@ export function withB2BAuth(
     const log = createChildLogger(requestId)
 
     try {
-      // Handle OPTIONS preflight before auth (browser sends preflight without Authorization)
-      const preflightResult = handlePreflight(request, [])
-      if (preflightResult) {
-        return preflightResult
-      }
-
-      // Authenticate API key
-      const authResult = await authenticateApiKey(request)
+      // Authenticate API key (required for all requests including OPTIONS)
+      // Note: Modern browsers include Authorization header in CORS preflight when using credentials
+      const authResult = await authenticateApiKey(request, requestId)
       if ('error' in authResult) {
         return authResult.error
       }

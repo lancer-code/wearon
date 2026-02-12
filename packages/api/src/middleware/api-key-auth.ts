@@ -5,7 +5,6 @@ import type { NextResponse } from 'next/server'
 import { logger } from '../logger'
 import type { B2BContext } from '../types/b2b'
 import { unauthorizedResponse } from '../utils/b2b-response'
-import { extractRequestId } from './request-id'
 
 const API_KEY_PREFIX = 'wk_'
 
@@ -27,8 +26,8 @@ function getServiceClient(): SupabaseClient {
 
 export async function authenticateApiKey(
   request: Request,
+  requestId: string,
 ): Promise<{ context: B2BContext } | { error: NextResponse }> {
-  const requestId = extractRequestId(request)
   const authHeader = request.headers.get('authorization')
 
   if (!authHeader) {

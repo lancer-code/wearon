@@ -3,8 +3,32 @@
  * Templates contain {{STORE_NAME}} placeholder for auto-fill.
  */
 
+// HIGH #1 FIX + MEDIUM #2 FIX: Sanitize and validate storeName to prevent XSS and DoS
+function sanitizeStoreName(storeName?: string): string {
+  if (!storeName || typeof storeName !== 'string') {
+    return '{{STORE_NAME}}'
+  }
+
+  // Limit length to prevent DoS via extremely long strings
+  const MAX_STORE_NAME_LENGTH = 100
+  const trimmed = storeName.trim()
+  if (trimmed.length > MAX_STORE_NAME_LENGTH) {
+    return '{{STORE_NAME}}'
+  }
+
+  // Remove all HTML tags and special characters that could cause XSS
+  // Only allow alphanumeric, spaces, hyphens, underscores, and dots
+  const sanitized = trimmed.replace(/[^a-zA-Z0-9\s\-_.]/g, '')
+
+  if (sanitized.length === 0) {
+    return '{{STORE_NAME}}'
+  }
+
+  return sanitized
+}
+
 export function getGdprTemplate(storeName?: string): string {
-  const name = storeName || '{{STORE_NAME}}'
+  const name = sanitizeStoreName(storeName)
   return `PRIVACY POLICY — VIRTUAL TRY-ON SERVICE
 
 Effective Date: [INSERT DATE]
@@ -60,7 +84,7 @@ Supervisory Authority: You may lodge a complaint with your local data protection
 }
 
 export function getCcpaTemplate(storeName?: string): string {
-  const name = storeName || '{{STORE_NAME}}'
+  const name = sanitizeStoreName(storeName)
   return `PRIVACY DISCLOSURE — CALIFORNIA CONSUMER PRIVACY ACT (CCPA)
 
 Effective Date: [INSERT DATE]
@@ -109,7 +133,7 @@ Privacy inquiries: [INSERT CONTACT EMAIL]`
 }
 
 export function getDpaTemplate(storeName?: string): string {
-  const name = storeName || '{{STORE_NAME}}'
+  const name = sanitizeStoreName(storeName)
   return `DATA PROCESSING AGREEMENT (DPA)
 
 Effective Date: [INSERT DATE]

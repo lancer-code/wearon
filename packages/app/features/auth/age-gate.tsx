@@ -5,6 +5,10 @@ import { YStack, Text, Button, Card } from '@my/ui'
 
 const AGE_VERIFIED_KEY = 'wearon_age_verified_v1'
 
+// MEDIUM #2 FIX: Add timestamp validation to prevent stale/tampered verification
+const AGE_VERIFIED_TIMESTAMP_KEY = 'wearon_age_verified_ts_v1'
+const MAX_AGE_VERIFICATION_DURATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
 function getSessionStorage(): Storage | null {
   if (typeof globalThis === 'undefined' || !globalThis.sessionStorage) {
     return null
@@ -18,7 +22,39 @@ export function isAgeVerified(): boolean {
   if (!storage) {
     return false
   }
-  return storage.getItem(AGE_VERIFIED_KEY) === 'true'
+
+  const verified = storage.getItem(AGE_VERIFIED_KEY) === 'true'
+  if (!verified) {
+    return false
+  }
+
+  // MEDIUM #2 FIX: Validate timestamp hasn't been tampered or expired
+  const timestampStr = storage.getItem(AGE_VERIFIED_TIMESTAMP_KEY)
+  if (!timestampStr) {
+    // No timestamp - invalidate verification
+    storage.removeItem(AGE_VERIFIED_KEY)
+    return false
+  }
+
+  const timestamp = Number(timestampStr)
+  if (!Number.isFinite(timestamp) || timestamp < 0) {
+    // Invalid timestamp - clear and reject
+    storage.removeItem(AGE_VERIFIED_KEY)
+    storage.removeItem(AGE_VERIFIED_TIMESTAMP_KEY)
+    return false
+  }
+
+  const now = Date.now()
+  const age = now - timestamp
+
+  if (age < 0 || age > MAX_AGE_VERIFICATION_DURATION_MS) {
+    // Timestamp is in the future (tampered) or too old - invalidate
+    storage.removeItem(AGE_VERIFIED_KEY)
+    storage.removeItem(AGE_VERIFIED_TIMESTAMP_KEY)
+    return false
+  }
+
+  return true
 }
 
 /** Store age verification result in session storage */
@@ -26,6 +62,7 @@ export function setAgeVerified(): void {
   const storage = getSessionStorage()
   if (storage) {
     storage.setItem(AGE_VERIFIED_KEY, 'true')
+    storage.setItem(AGE_VERIFIED_TIMESTAMP_KEY, Date.now().toString())
   }
 }
 
@@ -34,12 +71,10 @@ export function setAgeVerified(): void {
  * Checks session storage on mount so the gate is only shown once per session.
  */
 export function useAgeGate() {
+  // LOW #3 FIX: Remove redundant useEffect to prevent race condition and component flicker
+  // Only read session storage once during initialization
   const [verified, setVerified] = useState(() => isAgeVerified())
   const [blocked, setBlocked] = useState(false)
-
-  useEffect(() => {
-    setVerified(isAgeVerified())
-  }, [])
 
   const confirmAge = useCallback(() => {
     setAgeVerified()

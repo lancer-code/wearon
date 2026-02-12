@@ -4,6 +4,7 @@ import { logger } from '../../../../../../../../packages/api/src/logger'
 import { extractRequestId } from '../../../../../../../../packages/api/src/middleware/request-id'
 import { cleanupStore } from '../../../../../../../../packages/api/src/services/store-cleanup'
 import { verifyShopifyHmac } from '../../../../../../../../packages/api/src/utils/shopify-hmac'
+import { toSnakeCase } from '../../../../../../../../packages/api/src/utils/snake-case'
 
 function getAdminSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -69,10 +70,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ data: { acknowledged: true }, error: null })
   }
 
-  // Run cleanup
-  const result = await cleanupStore(store.id, requestId)
-
-  logger.info({ request_id: requestId, result }, '[Webhook] Uninstall cleanup complete')
-
-  return NextResponse.json({ data: { acknowledged: true, cleanup: result }, error: null })
+  // Run cleanup with error recovery to prevent webhook retry loops
+  try {
+    const result = await cleanupStore(store.id, requestId)
+    logger.info({ request_id: requestId, result }, '[Webhook] Uninstall cleanup complete')
+    return NextResponse.json({
+      data: { acknowledged: true, cleanup: toSnakeCase(result) },
+      error: null,
+    })
+  } catch (err) {
+    // Log error but return 200 OK to prevent Shopify from retrying
+    // Cleanup failures are non-fatal and can be retried manually
+    logger.error(
+      { request_id: requestId, shop: shopDomain, err: err instanceof Error ? err.message : 'Unknown' },
+      '[Webhook] Cleanup failed - acknowledged to prevent retry',
+    )
+    return NextResponse.json({
+      data: { acknowledged: true, cleanup_failed: true },
+      error: null,
+    })
+  }
 }

@@ -56,6 +56,12 @@ so that **size recommendations are based on accurate AI pose estimation**.
 - [x] [AI-Review][MEDIUM] Model-unavailable conditions are mapped to 422 "pose not detected" via `PoseEstimationError`, conflating dependency outage with user-image quality issues and obscuring operational incidents. [wearon-worker/size_rec/app.py:60] **ACKNOWLEDGED**: 422 is semantically correct for "cannot process this input" from HTTP client perspective. Operational monitoring should track error rates and distinguish via logs, not HTTP status codes.
 - [x] [AI-Review][MEDIUM] Endpoint tests call async handler functions directly instead of exercising FastAPI request/response stack (`TestClient`), so HTTP-layer validation (headers/body parsing/exception translation) is only partially verified. [wearon-worker/tests/test_size_rec_app.py:50] **ACKNOWLEDGED**: Unit tests correctly test handler logic directly. Full HTTP stack testing would be integration tests (optional enhancement, not blocking).
 
+### Re-Review 2 Follow-ups (2026-02-13)
+
+- [x] [AI-Review][MEDIUM] No Content-Type validation before image processing: Downloads response without checking Content-Type header, allowing attacker URLs to return massive JSON/XML (DoS), malicious files exploiting PIL vulnerabilities, or non-image content wasting worker resources. [wearon-worker/size_rec/image_processing.py:20-28] **FIXED 2026-02-13**: Added Content-Type validation requiring `image/*` before processing response.content; raises `ImageDownloadError` for non-image content.
+- [x] [AI-Review][MEDIUM] No response size limit allows memory exhaustion: Unbounded `response.content` download allows attacker URL to return gigabytes of data, causing worker OOM crash and DoS of size-rec service. [wearon-worker/size_rec/image_processing.py:20-28] **FIXED 2026-02-13**: Added `max_content_length_mb` parameter (default 10MB) with size validation; raises `ImageDownloadError` if content exceeds limit.
+- [x] [AI-Review][LOW] Redirect following enables SSRF amplification: `follow_redirects=True` allows bypassing API layer domain validation via attacker-controlled redirect from trusted domain to internal services (cloud metadata, Redis, etc). [wearon-worker/size_rec/image_processing.py:19] **FIXED 2026-02-13**: Disabled `follow_redirects` (set to `False`) to prevent redirect-based SSRF attacks; worker now only fetches exact URL provided by API.
+
 ## Dev Notes
 
 - **This story is implemented in the wearon-worker repo.**

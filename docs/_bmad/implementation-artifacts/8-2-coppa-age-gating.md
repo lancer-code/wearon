@@ -1,6 +1,6 @@
 # Story 8.2: COPPA Age Gating
 
-Status: review
+Status: done
 
 ## Story
 
@@ -43,6 +43,17 @@ so that **the platform complies with COPPA requirements**.
   - [x] 5.3 Test server rejects generation without age verification.
   - [x] 5.4 Test no photo data collected before age verification.
   - [x] 5.5 Verify B2C auth endpoints unchanged.
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][INFO] Implementation is comprehensive and COPPA-compliant. Age gate component uses privacy-first approach (session storage only, no DOB persistence). Server-side enforcement properly validates `age_verified`/`ageVerified` BEFORE credit deduction in both B2C tRPC (generation.ts:46-51) and B2B REST (create/route.ts:128-134). Flow order enforced: Age Gate → Privacy Disclosure → Camera Access. B2C auth files completely untouched per git diff. All 15 tests passing. **VERIFIED 2026-02-13**: No issues found. Story complete.
+
+### Re-Review 2 Follow-ups (2026-02-13)
+
+- [x] [AI-Review][MEDIUM] Missing analytics logging for age verification failures: No server-side logging when users fail age verification (indicate under 13 or missing verification). Critical for COPPA compliance auditing - platform should track minor access attempts and blocks. [packages/api/src/routers/generation.ts:47-52, apps/next/app/api/v1/generation/create/route.ts:128-134] **FIXED 2026-02-13**: Added logger.warn() for age verification failures in both B2C tRPC (event: 'age_verification_failed_b2c') and B2B REST (event: 'age_verification_failed_b2b') endpoints, logging userId/storeId and ageVerified value for compliance auditing.
+- [x] [AI-Review][MEDIUM] Session storage lacks timestamp/expiry validation: Age verification stored indefinitely in session storage with no timestamp. Verification timestamp could be tampered with or remain valid beyond intended duration. [packages/app/features/auth/age-gate.tsx:16-22, wearon-shopify/.../tryon-privacy-flow.js:91-98] **FIXED 2026-02-13**: Added timestamp validation in both B2C and B2B implementations. Created AGE_VERIFIED_TIMESTAMP_KEY with 24-hour expiry (MAX_AGE_VERIFICATION_DURATION_MS). isAgeVerified() now validates timestamp exists, is valid number, is not in future (tamper detection), and is within 24-hour window. Added 7 tests covering invalid/missing/future/expired timestamps.
+- [x] [AI-Review][LOW] Race condition in useAgeGate hook: Initial state (line 37) and useEffect (lines 40-42) both read session storage, causing potential component flicker between verified/not-verified states on mount. [packages/app/features/auth/age-gate.tsx:37-42] **FIXED 2026-02-13**: Removed redundant useEffect that was re-reading session storage after mount. Now only reads once during useState initialization, preventing race condition and component flicker.
+- [x] [AI-Review][LOW] Generic error message for age verification failures: Server returns generic "Age verification is required to use this feature" message. Should provide more specific COPPA compliance context for better user understanding. [packages/api/src/routers/generation.ts:50, apps/next/app/api/v1/generation/create/route.ts:131] **FIXED 2026-02-13**: Updated error messages to include COPPA context: "You must be 13 or older to use this feature. Age verification is required for COPPA compliance." Provides clearer guidance to users about age requirement and compliance reason.
 
 ## Dev Notes
 

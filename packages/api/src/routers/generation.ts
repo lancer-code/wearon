@@ -44,10 +44,21 @@ export const generationRouter = router({
         throw new Error('Unauthorized')
       }
 
+      // MEDIUM #1 FIX + LOW #4 FIX: Log age verification failures for COPPA compliance and provide specific error
       if (input.ageVerified !== true) {
+        logger.warn(
+          {
+            userId: ctx.user.id,
+            ageVerified: input.ageVerified,
+            event: 'age_verification_failed_b2c',
+          },
+          '[COPPA] B2C user failed age verification - access blocked'
+        )
+
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Age verification is required to use this feature',
+          message:
+            'You must be 13 or older to use this feature. Age verification is required for COPPA compliance.',
         })
       }
 

@@ -1,9 +1,35 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { YStack, XStack, Text, Card, PageHeader, PageContent, Button } from '@my/ui'
-import { Copy, Check, FileText, Shield, Handshake } from '@tamagui/lucide-icons'
+import { Copy, Check, FileText, Shield, Handshake, AlertCircle } from '@tamagui/lucide-icons'
 import { trpc } from '../../utils/trpc'
+
+// MEDIUM #5 FIX: Properly extract store name from Shopify domain
+function extractStoreName(shopDomain: string | undefined): string | null {
+  if (!shopDomain || typeof shopDomain !== 'string') {
+    return null
+  }
+
+  // Validate it's a proper .myshopify.com domain
+  if (!shopDomain.endsWith('.myshopify.com')) {
+    return null
+  }
+
+  // Extract the subdomain part
+  const parts = shopDomain.split('.')
+  if (parts.length !== 3 || parts[1] !== 'myshopify' || parts[2] !== 'com') {
+    return null
+  }
+
+  const storeName = parts[0]
+  // Validate store name is not empty and contains valid characters
+  if (!storeName || storeName.length === 0 || !/^[a-zA-Z0-9-]+$/.test(storeName)) {
+    return null
+  }
+
+  return storeName
+}
 
 function TemplateCard({
   title,
@@ -74,7 +100,9 @@ function TemplateCard({
 
 export function PrivacyResourcesScreen() {
   const storeQuery = trpc.merchant.getMyStore.useQuery()
-  const storeName = storeQuery.data?.shopDomain?.replace('.myshopify.com', '') || '{{STORE_NAME}}'
+
+  // MEDIUM #5 FIX: Properly parse shopDomain instead of naive string replacement
+  const storeName = extractStoreName(storeQuery.data?.shopDomain) || '{{STORE_NAME}}'
 
   // Import templates at render time with store name filled in
   const [templates, setTemplates] = useState<{
@@ -82,16 +110,47 @@ export function PrivacyResourcesScreen() {
     ccpa: string
     dpa: string
   } | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  // Load templates dynamically
-  if (!templates) {
-    import('@my/api/src/templates/privacy-policy').then((mod) => {
-      setTemplates({
-        gdpr: mod.getGdprTemplate(storeName),
-        ccpa: mod.getCcpaTemplate(storeName),
-        dpa: mod.getDpaTemplate(storeName),
+  // MEDIUM #3 FIX + MEDIUM #4 FIX: Use useEffect to prevent race conditions and add error handling
+  useEffect(() => {
+    import('@my/api/src/templates/privacy-policy')
+      .then((mod) => {
+        setTemplates({
+          gdpr: mod.getGdprTemplate(storeName),
+          ccpa: mod.getCcpaTemplate(storeName),
+          dpa: mod.getDpaTemplate(storeName),
+        })
       })
-    })
+      .catch((error) => {
+        console.error('Failed to load privacy templates:', error)
+        setLoadError('Failed to load privacy templates. Please refresh the page.')
+      })
+  }, [storeName])
+
+  // MEDIUM #4 FIX: Show error UI if template loading failed
+  if (loadError) {
+    return (
+      <YStack flex={1} padding="$6" gap="$6">
+        <PageHeader
+          title="Privacy Resources"
+          subtitle="Ready-to-use privacy policy templates for your store's virtual try-on feature"
+        />
+        <Card bordered padding="$4" backgroundColor="$red2">
+          <XStack gap="$3" alignItems="center">
+            <AlertCircle size={24} color="$red10" />
+            <YStack gap="$2" flex={1}>
+              <Text fontSize="$4" fontWeight="600" color="$red10">
+                Error Loading Templates
+              </Text>
+              <Text color="$color8" fontSize="$3">
+                {loadError}
+              </Text>
+            </YStack>
+          </XStack>
+        </Card>
+      </YStack>
+    )
   }
 
   return (

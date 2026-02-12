@@ -9,12 +9,32 @@ import {
 } from '../../../../../../packages/api/src/utils/b2b-response'
 
 const WORKER_TIMEOUT_MS = 5000
+const NFR2_TARGET_MS = 1000
 const SIZE_REC_UNAVAILABLE_MESSAGE = 'Size recommendation temporarily unavailable'
 
-const sizeRecRequestSchema = z.object({
-  image_url: z.string().url(),
-  height_cm: z.number().min(100).max(250),
-})
+function createSizeRecRequestSchema() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+
+  return z.object({
+    image_url: z
+      .string()
+      .url()
+      .refine(
+        (url) => {
+          if (!supabaseUrl) return false
+          try {
+            const supabaseDomain = new URL(supabaseUrl).hostname
+            const urlDomain = new URL(url).hostname
+            return urlDomain === supabaseDomain || urlDomain.endsWith(`.${supabaseDomain}`)
+          } catch {
+            return false
+          }
+        },
+        { message: 'image_url must be from trusted storage domain' }
+      ),
+    height_cm: z.number().min(100).max(250),
+  })
+}
 
 const sizeRecWorkerResponseSchema = z.object({
   recommended_size: z.string(),
@@ -62,11 +82,13 @@ export async function handleSizeRecPost(request: Request, context: B2BContext) {
     return errorResponse('VALIDATION_ERROR', 'Invalid JSON body', 400)
   }
 
+  const sizeRecRequestSchema = createSizeRecRequestSchema()
   const parsedBody = sizeRecRequestSchema.safeParse(rawBody)
   if (!parsedBody.success) {
+    const issues = parsedBody.error.issues.map((i) => i.message).join(', ')
     return errorResponse(
       'VALIDATION_ERROR',
-      'image_url must be a valid URL and height_cm must be between 100 and 250',
+      `Validation failed: ${issues}`,
       400
     )
   }
@@ -78,6 +100,7 @@ export async function handleSizeRecPost(request: Request, context: B2BContext) {
   }
 
   const workerEndpoint = toWorkerEndpoint(workerApiUrl)
+  const startedAtMs = Date.now()
 
   try {
     const workerResponse = await axios.post(
@@ -100,24 +123,45 @@ export async function handleSizeRecPost(request: Request, context: B2BContext) {
       return errorResponse('SERVICE_UNAVAILABLE', SIZE_REC_UNAVAILABLE_MESSAGE, 503)
     }
 
-    return successResponse({
-      recommendedSize: parsedWorkerResponse.data.recommended_size,
+    const responseTimeMs = Date.now() - startedAtMs
+    if (responseTimeMs > NFR2_TARGET_MS) {
+      log.warn(
+        {
+          worker_url: workerApiUrl,
+          response_time_ms: responseTimeMs,
+          nfr_target_ms: NFR2_TARGET_MS,
+        },
+        '[B2B Size Rec] Response exceeded NFR2 target'
+      )
+    }
+
+    const response = successResponse({
+      recommended_size: parsedWorkerResponse.data.recommended_size,
       measurements: parsedWorkerResponse.data.measurements,
       confidence: parsedWorkerResponse.data.confidence,
-      bodyType: parsedWorkerResponse.data.body_type,
+      body_type: parsedWorkerResponse.data.body_type,
     })
+    response.headers.set('X-Size-Rec-Latency-Ms', String(responseTimeMs))
+    response.headers.set('X-Size-Rec-Target-Ms', String(NFR2_TARGET_MS))
+    return response
   } catch (err) {
+    const responseTimeMs = Date.now() - startedAtMs
     log.error(
       {
         worker_url: workerApiUrl,
         error_code: axios.isAxiosError(err) ? err.code : 'UNKNOWN',
         status: axios.isAxiosError(err) ? err.response?.status : null,
+        response_time_ms: responseTimeMs,
       },
       '[B2B Size Rec] Worker request failed'
     )
 
     if (isWorkerUnavailableError(err)) {
       return errorResponse('SERVICE_UNAVAILABLE', SIZE_REC_UNAVAILABLE_MESSAGE, 503)
+    }
+
+    if (axios.isAxiosError(err) && err.response?.status && err.response.status >= 400 && err.response.status < 500) {
+      return errorResponse('VALIDATION_ERROR', 'Worker rejected the request', 400)
     }
 
     return errorResponse('INTERNAL_ERROR', 'Failed to process size recommendation request', 500)

@@ -1,6 +1,6 @@
 # Story 6.3: Shopify Order Webhook Processing
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -20,38 +20,38 @@ so that **credits are added to shopper balances reliably and idempotently**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Webhook endpoint with HMAC verification (AC: #1)
-  - [ ] 1.1 Create route at `apps/next/app/api/v1/webhooks/shopify/orders/route.ts`.
-  - [ ] 1.2 Verify HMAC-SHA256 signature using Shopify app secret from environment variable.
-  - [ ] 1.3 Read raw request body for signature verification (before JSON parsing).
-  - [ ] 1.4 Reject invalid signatures with 401.
-  - [ ] 1.5 Log all webhook arrivals with `request_id` (never log shopper emails in plaintext).
+- [x] Task 1: Webhook endpoint with HMAC verification (AC: #1)
+  - [x] 1.1 Create route at `apps/next/app/api/v1/webhooks/shopify/orders/route.ts`.
+  - [x] 1.2 Verify HMAC-SHA256 signature using Shopify app secret from environment variable.
+  - [x] 1.3 Read raw request body for signature verification (before JSON parsing).
+  - [x] 1.4 Reject invalid signatures with 401.
+  - [x] 1.5 Log all webhook arrivals with `request_id` (never log shopper emails in plaintext).
 
-- [ ] Task 2: Credit transfer logic (AC: #2)
-  - [ ] 2.1 Parse order webhook payload — extract `shopify_order_id`, line items, customer email, shop domain.
-  - [ ] 2.2 Identify "Try-On Credit" product by matching `shopify_product_id` stored in `stores` table.
-  - [ ] 2.3 Calculate credit quantity (N) from order line item quantity.
-  - [ ] 2.4 Resolve `store_id` from `shop_domain` in `stores` table.
-  - [ ] 2.5 Atomically: deduct N from `store_credits` (wholesale pool), add N to `store_shopper_credits` (shopper balance).
-  - [ ] 2.6 Create `store_shopper_purchases` record with `shopify_order_id`, `store_id`, `shopper_email`, `credits_purchased`, `amount_paid`, `currency`.
+- [x] Task 2: Credit transfer logic (AC: #2)
+  - [x] 2.1 Parse order webhook payload — extract `shopify_order_id`, line items, customer email, shop domain.
+  - [x] 2.2 Identify "Try-On Credit" product by matching `shopify_product_id` stored in `stores` table.
+  - [x] 2.3 Calculate credit quantity (N) from order line item quantity.
+  - [x] 2.4 Resolve `store_id` from `shop_domain` in `stores` table.
+  - [x] 2.5 Atomically: deduct N from `store_credits` (wholesale pool), add N to `store_shopper_credits` (shopper balance).
+  - [x] 2.6 Create `store_shopper_purchases` record with `shopify_order_id`, `store_id`, `shopper_email`, `credits_purchased`, `amount_paid`, `currency`.
 
-- [ ] Task 3: Idempotent processing (AC: #3)
-  - [ ] 3.1 Check `store_shopper_purchases` for existing record with same `shopify_order_id` before processing.
-  - [ ] 3.2 If exists, return 200 with existing purchase data (no re-processing).
-  - [ ] 3.3 Use `shopify_order_id` UNIQUE constraint to catch race conditions.
+- [x] Task 3: Idempotent processing (AC: #3)
+  - [x] 3.1 Check `store_shopper_purchases` for existing record with same `shopify_order_id` before processing.
+  - [x] 3.2 If exists, return 200 with existing purchase data (no re-processing).
+  - [x] 3.3 Use `shopify_order_id` UNIQUE constraint to catch race conditions.
 
-- [ ] Task 4: Insufficient credit handling (AC: #4)
-  - [ ] 4.1 Before transferring, check `store_credits.balance >= N`.
-  - [ ] 4.2 If insufficient, log error with `store_id` and `request_id`.
-  - [ ] 4.3 Return 200 to Shopify (acknowledge webhook) but do NOT transfer credits.
-  - [ ] 4.4 Create an analytics event `store_credit_insufficient` for admin visibility.
+- [x] Task 4: Insufficient credit handling (AC: #4)
+  - [x] 4.1 Before transferring, check `store_credits.balance >= N`.
+  - [x] 4.2 If insufficient, log error with `store_id` and `request_id`.
+  - [x] 4.3 Return 200 to Shopify (acknowledge webhook) but do NOT transfer credits.
+  - [x] 4.4 Create an analytics event `store_credit_insufficient` for admin visibility.
 
-- [ ] Task 5: Write tests (AC: #1-4)
-  - [ ] 5.1 Test HMAC verification accepts valid and rejects invalid signatures.
-  - [ ] 5.2 Test credit transfer deducts from store pool and adds to shopper balance.
-  - [ ] 5.3 Test duplicate webhook is idempotent.
-  - [ ] 5.4 Test insufficient credits prevents transfer.
-  - [ ] 5.5 Test non-"Try-On Credit" orders are ignored.
+- [x] Task 5: Write tests (AC: #1-4)
+  - [x] 5.1 Test HMAC verification accepts valid and rejects invalid signatures.
+  - [x] 5.2 Test credit transfer deducts from store pool and adds to shopper balance.
+  - [x] 5.3 Test duplicate webhook is idempotent.
+  - [x] 5.4 Test insufficient credits prevents transfer.
+  - [x] 5.5 Test non-"Try-On Credit" orders are ignored.
 
 ## Dev Notes
 
@@ -100,10 +100,28 @@ so that **credits are added to shopper balances reliably and idempotently**.
 
 ### Agent Model Used
 
-(to be filled by dev agent)
+Codex GPT-5
 
 ### Debug Log References
 
+- `yarn vitest run apps/next/__tests__/shopify-orders-webhook.route.test.ts`
+- `yarn vitest run apps/next/__tests__/shopify-orders-webhook.route.test.ts apps/next/__tests__/stores-config.route.test.ts packages/api/__tests__/services/shopify-credit-product.test.ts`
+
 ### Completion Notes List
 
+- Added new Shopify `orders/create` webhook route: `apps/next/app/api/v1/webhooks/shopify/orders/route.ts`.
+- Implemented HMAC validation, shop/store resolution, and credit-line-item parsing against `stores.shopify_product_id`.
+- Added idempotent pre-check using `store_shopper_purchases.shopify_order_id`.
+- Added atomic database RPC via migration `011_shopify_order_credit_transfer_rpc.sql`:
+  - deducts store wholesale credits
+  - inserts purchase record
+  - upserts shopper credit balance
+  - handles race duplicates using unique constraint + refund compensation
+- Added insufficient-credit handling with analytics event `store_credit_insufficient`.
+- Added webhook tests covering signature validation, successful transfer flow, duplicate idempotency, insufficient credit handling, and non-credit-order ignore path.
+
 ### File List
+
+- `apps/next/app/api/v1/webhooks/shopify/orders/route.ts`
+- `apps/next/__tests__/shopify-orders-webhook.route.test.ts`
+- `supabase/migrations/011_shopify_order_credit_transfer_rpc.sql`

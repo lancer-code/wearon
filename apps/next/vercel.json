@@ -1,5 +1,5 @@
 {
-  "installCommand": "yarn set version 4 && yarn install",
+  "installCommand": "yarn set version 4.5.0 && yarn install",
   "crons": [
     {
       "path": "/api/cron/cleanup",

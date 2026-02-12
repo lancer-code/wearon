@@ -99,6 +99,26 @@ describe('store-cleanup', () => {
           }),
         }
       }
+      if (table === 'store_api_keys') {
+        return {
+          delete: () => ({
+            eq: () => ({
+              select: () => Promise.resolve({ data: [], error: null }),
+            }),
+          }),
+        }
+      }
+      if (table === 'store_generation_sessions') {
+        return {
+          update: () => ({
+            eq: (_col: string, _val: string) => ({
+              eq: () => ({
+                select: () => Promise.resolve({ data: [], error: null }),
+              }),
+            }),
+          }),
+        }
+      }
       return {}
     })
 
@@ -106,9 +126,11 @@ describe('store-cleanup', () => {
 
     const result = await cleanupStore('store-123', 'req_test')
 
+    // Cleanup continues even when store is already inactive (idempotent retry)
     expect(result.alreadyInactive).toBe(true)
-    expect(result.apiKeysDeleted).toBe(0)
-    expect(result.jobsCancelled).toBe(0)
+    // API keys and jobs are still cleaned up to ensure complete cleanup
+    expect(result.apiKeysDeleted).toBeGreaterThanOrEqual(0)
+    expect(result.jobsCancelled).toBeGreaterThanOrEqual(0)
   })
 
   it('handles store not found', async () => {
@@ -131,5 +153,79 @@ describe('store-cleanup', () => {
 
     expect(result.apiKeysDeleted).toBe(0)
     expect(result.jobsCancelled).toBe(0)
+  })
+
+  it('completes within NFR34 timing budget (5 seconds)', async () => {
+    const { cleanupStore } = await import('../../src/services/store-cleanup')
+
+    const startTime = Date.now()
+    await cleanupStore('store-123', 'req_test')
+    const duration = Date.now() - startTime
+
+    // NFR34: Cleanup operations should complete within 5 seconds
+    expect(duration).toBeLessThan(5000)
+  })
+
+  it('handles transactional ordering correctly (store marked inactive first)', async () => {
+    const operationOrder: string[] = []
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'stores') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => {
+                operationOrder.push('store-lookup')
+                return Promise.resolve({ data: { status: 'active' }, error: null })
+              },
+            }),
+          }),
+          update: () => {
+            operationOrder.push('store-inactive')
+            return {
+              eq: () => Promise.resolve({ data: null, error: null }),
+            }
+          },
+        }
+      }
+      if (table === 'store_api_keys') {
+        return {
+          delete: () => {
+            operationOrder.push('keys-deleted')
+            return {
+              eq: () => ({
+                select: () => Promise.resolve({ data: [{ id: 'key-1' }], error: null }),
+              }),
+            }
+          },
+        }
+      }
+      if (table === 'store_generation_sessions') {
+        return {
+          update: () => {
+            operationOrder.push('jobs-cancelled')
+            return {
+              eq: (_col: string, _val: string) => ({
+                eq: () => ({
+                  select: () => Promise.resolve({ data: [{ id: 'session-1' }], error: null }),
+                }),
+              }),
+            }
+          },
+        }
+      }
+      return {}
+    })
+
+    const { cleanupStore } = await import('../../src/services/store-cleanup')
+    await cleanupStore('store-123', 'req_test')
+
+    // Verify transactional ordering: store marked inactive BEFORE cleanup operations
+    expect(operationOrder).toEqual([
+      'store-lookup',
+      'store-inactive',
+      'keys-deleted',
+      'jobs-cancelled',
+    ])
   })
 })

@@ -109,6 +109,13 @@ export function MerchantOnboarding() {
 
             <YStack gap="$3" paddingTop="$2">
               <XStack justifyContent="space-between" paddingVertical="$2">
+                <Text color="$color10" fontWeight="500">Store Name</Text>
+                <Text fontWeight="600">
+                  {store?.shopDomain?.replace('.myshopify.com', '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) ?? '--'}
+                </Text>
+              </XStack>
+              <Separator />
+              <XStack justifyContent="space-between" paddingVertical="$2">
                 <Text color="$color10" fontWeight="500">Shop Domain</Text>
                 <Text>{store?.shopDomain ?? '--'}</Text>
               </XStack>

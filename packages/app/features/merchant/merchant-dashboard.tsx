@@ -27,8 +27,10 @@ export function MerchantDashboard() {
   const creditBalance = creditsQuery.data?.balance ?? 0
 
   const handleCopyKey = async () => {
-    if (apiKeyQuery.data?.maskedKey) {
-      await navigator.clipboard.writeText(apiKeyQuery.data.maskedKey)
+    // Only copy if we have a full key (after regeneration), not the masked preview
+    // Masked preview is not a usable API key value
+    if (newApiKey) {
+      await navigator.clipboard.writeText(newApiKey)
       setJustCopied(true)
       setTimeout(() => setJustCopied(false), 2000)
     }
@@ -107,6 +109,9 @@ export function MerchantDashboard() {
               <Text color="$color10" fontSize="$3">
                 Your API key is used by the Shopify plugin to authenticate with WearOn.
               </Text>
+              <Text color="$color9" fontSize="$2">
+                For security, only a masked preview is shown. Regenerate your key to copy the full value.
+              </Text>
               <XStack gap="$2" alignItems="center">
                 <div
                   style={{
@@ -143,15 +148,17 @@ export function MerchantDashboard() {
                 <button
                   onClick={handleCopyKey}
                   type="button"
+                  disabled={!newApiKey}
                   style={{
                     padding: '10px',
                     borderRadius: 6,
                     border: '1px solid #27272a',
                     backgroundColor: 'transparent',
-                    color: justCopied ? '#22c55e' : '#a1a1aa',
-                    cursor: 'pointer',
+                    color: justCopied && newApiKey ? '#22c55e' : newApiKey ? '#a1a1aa' : '#52525b',
+                    cursor: newApiKey ? 'pointer' : 'not-allowed',
+                    opacity: newApiKey ? 1 : 0.5,
                   }}
-                  title="Copy masked key"
+                  title={newApiKey ? 'Copy full API key' : 'Regenerate key to copy full value'}
                 >
                   <Copy size={16} />
                 </button>

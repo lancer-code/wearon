@@ -27,15 +27,15 @@ export async function cleanupStore(storeId: string, requestId: string): Promise<
     alreadyInactive: false,
   }
 
-  // Check if store is already inactive (idempotency)
-  const { data: store } = await supabase
+  // Check if store exists and get current status
+  const { data: store, error: storeError } = await supabase
     .from('stores')
     .select('status')
     .eq('id', storeId)
     .single()
 
-  if (!store) {
-    log.warn({ storeId }, '[StoreCleanup] Store not found')
+  if (storeError || !store) {
+    log.warn({ storeId, err: storeError?.message }, '[StoreCleanup] Store not found')
     return result
   }
 
@@ -45,7 +45,23 @@ export async function cleanupStore(storeId: string, requestId: string): Promise<
     // Continue with cleanup to ensure API keys/jobs/storage are cleaned even if store status was set
   }
 
-  // Delete API keys (check error)
+  // STEP 1: Mark store as inactive FIRST (transactional safety)
+  // This ensures partial completion leaves store in inactive state, allowing safe retry
+  if (store.status !== 'inactive') {
+    const { error: updateError } = await supabase
+      .from('stores')
+      .update({ status: 'inactive', updated_at: new Date().toISOString() })
+      .eq('id', storeId)
+
+    if (updateError) {
+      log.error({ storeId, err: updateError.message }, '[StoreCleanup] Failed to mark store inactive')
+      throw new Error(`Store update failed: ${updateError.message}`)
+    }
+
+    log.info({ storeId }, '[StoreCleanup] Store marked inactive')
+  }
+
+  // STEP 2: Delete API keys (safe to retry if store already inactive)
   const { data: deletedKeys, error: deleteKeysError } = await supabase
     .from('store_api_keys')
     .delete()
@@ -59,19 +75,6 @@ export async function cleanupStore(storeId: string, requestId: string): Promise<
 
   result.apiKeysDeleted = deletedKeys?.length ?? 0
   log.info({ storeId, count: result.apiKeysDeleted }, '[StoreCleanup] API keys deleted')
-
-  // Mark store as inactive (check error)
-  const { error: updateError } = await supabase
-    .from('stores')
-    .update({ status: 'inactive', updated_at: new Date().toISOString() })
-    .eq('id', storeId)
-
-  if (updateError) {
-    log.error({ storeId, err: updateError.message }, '[StoreCleanup] Failed to mark store inactive')
-    throw new Error(`Store update failed: ${updateError.message}`)
-  }
-
-  log.info({ storeId }, '[StoreCleanup] Store marked inactive')
 
   // Cancel queued generation jobs (check error)
   const { data: cancelledJobs, error: cancelJobsError } = await supabase

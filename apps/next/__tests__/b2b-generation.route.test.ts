@@ -49,6 +49,11 @@ vi.mock('../../../packages/api/src/services/redis-queue', () => ({
   pushGenerationTask: (...args: unknown[]) => mockPushGenerationTask(...args),
 }))
 
+const mockLogStoreAnalyticsEvent = vi.fn()
+vi.mock('../../../packages/api/src/services/store-analytics', () => ({
+  logStoreAnalyticsEvent: (...args: unknown[]) => mockLogStoreAnalyticsEvent(...args),
+}))
+
 vi.mock('../../../packages/api/src/services/b2b-storage', () => ({
   getStoreUploadPath: (storeId: string) => `stores/${storeId}/uploads`,
 }))
@@ -198,6 +203,14 @@ describe('B2B generation REST routes', () => {
         sessionId: 'session_123',
       })
     )
+    expect(mockLogStoreAnalyticsEvent).toHaveBeenCalledWith(
+      'store_123',
+      'generation_queued',
+      expect.objectContaining({
+        request_id: 'req_test_123',
+        session_id: 'session_123',
+      })
+    )
   })
 
   it('POST /create in resell_mode deducts shopper credits', async () => {
@@ -297,6 +310,34 @@ describe('B2B generation REST routes', () => {
       },
     })
     expect(mockDeductStoreCredit).not.toHaveBeenCalled()
+  })
+
+  it('POST /create blocks query parameter path injection bypass (HIGH #1 security fix)', async () => {
+    // Security test: Attacker tries to bypass store-scoping by injecting path in query param
+    const maliciousUrls = [
+      // Path in query parameter
+      'https://evil.com/malware.jpg?fake=stores/store_123/uploads/trojan',
+      // Path in query parameter (URL encoded)
+      'https://evil.com/steal.php?redirect=https://cdn.supabase.co/stores/store_123/uploads/fake',
+      // Path in fragment
+      'https://attacker.io/exfil#stores/store_123/uploads/data',
+    ]
+
+    for (const maliciousUrl of maliciousUrls) {
+      const request = new Request('http://localhost/api/v1/generation/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          image_urls: [maliciousUrl],
+        }),
+      })
+
+      const response = await handleGenerationCreatePost(request, testContext)
+      const payload = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(payload.error.code).toBe('VALIDATION_ERROR')
+      expect(mockDeductStoreCredit).not.toHaveBeenCalled()
+    }
   })
 
   it('POST /create refunds and marks failed when queue push fails', async () => {

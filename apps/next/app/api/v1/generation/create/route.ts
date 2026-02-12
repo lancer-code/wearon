@@ -12,6 +12,7 @@ import {
 import {
   createOverageCharge,
   getTierOverageCents,
+  refundOverageCharge,
 } from '../../../../../../../packages/api/src/services/paddle'
 import { pushGenerationTask } from '../../../../../../../packages/api/src/services/redis-queue'
 import { getStoreUploadPath } from '../../../../../../../packages/api/src/services/b2b-storage'
@@ -21,6 +22,7 @@ import {
 } from '../../../../../../../packages/api/src/utils/b2b-response'
 import { TASK_PAYLOAD_VERSION } from '../../../../../../../packages/api/src/types/queue'
 import type { GenerationTaskPayload } from '../../../../../../../packages/api/src/types/queue'
+import { logStoreAnalyticsEvent } from '../../../../../../../packages/api/src/services/store-analytics'
 import { createClient } from '@supabase/supabase-js'
 
 const DEFAULT_B2B_PROMPT = `Virtual try-on: Using the provided images:
@@ -37,20 +39,15 @@ Requirements:
 - Professional fashion photography, natural lighting
 - Output ONE portrait (3:4 ratio)`
 
-let serviceClient: ReturnType<typeof createClient> | null = null
-
 function getServiceClient() {
-  if (!serviceClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
-    }
-
-    serviceClient = createClient(supabaseUrl, supabaseServiceKey)
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
   }
-  return serviceClient
+
+  return createClient(supabaseUrl, supabaseServiceKey)
 }
 
 function canDecode(value: string): string {
@@ -63,21 +60,27 @@ function canDecode(value: string): string {
 
 function isStoreScopedUploadUrl(imageUrl: string, storeId: string): boolean {
   const expectedPrefix = `${getStoreUploadPath(storeId)}/`
-  const candidates = [imageUrl, canDecode(imageUrl)]
 
   try {
     const parsed = new URL(imageUrl)
-    candidates.push(parsed.pathname)
-    candidates.push(canDecode(parsed.pathname))
-    for (const paramValue of parsed.searchParams.values()) {
-      candidates.push(paramValue)
-      candidates.push(canDecode(paramValue))
-    }
-  } catch {
-    // Non-URL inputs are still checked via the raw/decoded candidates above.
-  }
 
-  return candidates.some((candidate) => candidate.includes(expectedPrefix))
+    // HIGH #1 FIX: Use startsWith() on pathname only, NOT includes() on query params
+    // Previous includes() check allowed bypass via crafted query params:
+    // https://evil.com/malware.jpg?x=stores/store_123/uploads/ would pass!
+    const pathname = canDecode(parsed.pathname)
+
+    // SECURITY: Only validate pathname starts with expected prefix
+    // Query params and fragments are ignored to prevent injection bypass
+    if (pathname.startsWith(`/${expectedPrefix}`)) {
+      return true
+    }
+
+    // Also check without leading slash for compatibility
+    return pathname.startsWith(expectedPrefix)
+  } catch {
+    // Invalid URL format - reject
+    return false
+  }
 }
 
 function extractShopperEmail(request: Request): string | null {
@@ -120,7 +123,15 @@ export async function handleGenerationCreatePost(
     return errorResponse('VALIDATION_ERROR', 'Request body must be a JSON object', 400)
   }
 
-  const { image_urls, prompt } = body as Record<string, unknown>
+  const { image_urls, prompt, age_verified } = body as Record<string, unknown>
+
+  if (age_verified !== true) {
+    return errorResponse(
+      'AGE_VERIFICATION_REQUIRED',
+      'Age verification is required to use this feature',
+      403
+    )
+  }
 
   if (!Array.isArray(image_urls) || image_urls.length === 0) {
     return errorResponse('VALIDATION_ERROR', 'image_urls must be a non-empty array of URLs', 400)
@@ -308,6 +319,21 @@ export async function handleGenerationCreatePost(
         '[B2B Generation] Overage charge succeeded but transaction logging failed'
       )
     }
+
+    // MEDIUM #8 FIX: Store charge ID in session metadata as backup audit trail
+    try {
+      await supabase
+        .from('store_generation_sessions')
+        .update({
+          metadata: { overage_charge_id: overageChargeId, overage_tier: overagePlan.tier },
+        })
+        .eq('id', session.id)
+    } catch (metadataErr) {
+      log.warn(
+        { err: metadataErr, overageChargeId, sessionId: session.id },
+        '[B2B Generation] Failed to store overage charge ID in session metadata'
+      )
+    }
   }
 
   // Push to Redis queue
@@ -347,10 +373,23 @@ export async function handleGenerationCreatePost(
         log.error({ err: refundErr }, '[B2B Generation] Refund after queue failure also failed')
       }
     } else if (overageChargeId) {
-      log.warn(
-        { overageChargeId, sessionId: session.id },
-        '[B2B Generation] Queue failed after overage charge. Manual reconciliation may be required'
-      )
+      // HIGH #2 FIX: Attempt automated refund for overage charge when queue fails
+      try {
+        await refundOverageCharge({
+          chargeId: overageChargeId,
+          requestId: context.requestId,
+          reason: 'Queue failure after successful overage billing - service not delivered',
+        })
+        log.info(
+          { overageChargeId, sessionId: session.id },
+          '[B2B Generation] Overage charge refunded after queue failure'
+        )
+      } catch (refundErr) {
+        log.error(
+          { err: refundErr, overageChargeId, sessionId: session.id },
+          '[B2B Generation] Failed to refund overage charge after queue failure - manual reconciliation required'
+        )
+      }
     }
 
     await supabase
@@ -365,6 +404,11 @@ export async function handleGenerationCreatePost(
     { storeId: context.storeId, sessionId: session.id },
     '[B2B Generation] Task queued successfully'
   )
+
+  await logStoreAnalyticsEvent(context.storeId, 'generation_queued', {
+    request_id: context.requestId,
+    session_id: session.id,
+  })
 
   return successResponse({ sessionId: session.id, status: 'queued' }, 201)
 }

@@ -5,3 +5,5 @@ export { withB2BAuth, authenticateApiKey, checkCors, checkRateLimit } from './mi
 export type { B2BContext, B2BErrorCode, B2BResponse, RateLimitTier, RateLimitHeaders } from './types/b2b'
 export { RATE_LIMIT_TIERS } from './types/b2b'
 export { successResponse, errorResponse, unauthorizedResponse, forbiddenResponse } from './utils/b2b-response'
+export { logStoreAnalyticsEvent } from './services/store-analytics'
+export type { StoreAnalyticsEventType } from './services/store-analytics'

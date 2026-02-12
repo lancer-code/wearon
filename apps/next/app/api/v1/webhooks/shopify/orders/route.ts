@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '../../../../../../../../packages/api/src/logger'
 import { extractRequestId } from '../../../../../../../../packages/api/src/middleware/request-id'
+import { logStoreAnalyticsEvent } from '../../../../../../../../packages/api/src/services/store-analytics'
 import { verifyShopifyHmac } from '../../../../../../../../packages/api/src/utils/shopify-hmac'
 
 const SHOPIFY_ORDER_TOPIC = 'orders/create'
@@ -279,28 +280,17 @@ export async function POST(request: Request) {
   }
 
   if (transferRow.status === 'insufficient') {
-    const { error: analyticsError } = await supabase.from('store_analytics_events').insert({
-      store_id: store.id,
-      event_type: 'store_credit_insufficient',
-      shopper_email: shopperEmail,
-      metadata: {
+    await logStoreAnalyticsEvent(
+      store.id as string,
+      'store_credit_insufficient',
+      {
         credits_required: creditPurchase.creditsPurchased,
         shopify_order_id: orderId,
         request_id: requestId,
+        reason: 'insufficient_store_credits',
+        shopper_email_hash: shopperEmailHash,
       },
-    })
-
-    if (analyticsError) {
-      logger.error(
-        {
-          request_id: requestId,
-          store_id: store.id,
-          order_id: orderId,
-          err: analyticsError.message,
-        },
-        '[Shopify Orders Webhook] Failed to record insufficient-credit analytics event',
-      )
-    }
+    )
 
     logger.warn(
       { request_id: requestId, store_id: store.id, order_id: orderId, shopper_email_hash: shopperEmailHash },
@@ -319,6 +309,18 @@ export async function POST(request: Request) {
       purchase: transferRow,
     })
   }
+
+  await logStoreAnalyticsEvent(
+    store.id as string,
+    'credit_purchased',
+    {
+      credits_purchased: transferRow.credits_purchased,
+      amount_paid: transferRow.amount_paid,
+      shopify_order_id: orderId,
+      request_id: requestId,
+      shopper_email_hash: shopperEmailHash,
+    },
+  )
 
   logger.info(
     {

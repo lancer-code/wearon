@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.store_generation_sessions (
   error_message TEXT,
   processing_time_ms INTEGER,
   request_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ
 );
 
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS public.store_analytics_events (
   event_type TEXT NOT NULL,
   shopper_email TEXT,
   metadata JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- =============================================================================
@@ -47,7 +47,19 @@ CREATE INDEX IF NOT EXISTS idx_store_analytics_events_type_created ON public.sto
 -- =============================================================================
 -- Task 2.4: Enable Realtime for store_generation_sessions
 -- =============================================================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.store_generation_sessions;
+-- Idempotent version: Only add if not already in publication
+DO $$
+BEGIN
+  -- Check if table is already in the publication
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+    AND schemaname = 'public'
+    AND tablename = 'store_generation_sessions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.store_generation_sessions;
+  END IF;
+END $$;
 
 -- =============================================================================
 -- Comments

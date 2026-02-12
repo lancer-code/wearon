@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '../logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -135,7 +136,7 @@ export async function cleanupOldSessions(): Promise<number> {
     .select('id')
 
   if (error) {
-    console.error('Error cleaning up old sessions:', error)
+    logger.error('Error cleaning up old sessions:', error)
     return 0
   }
 
@@ -182,7 +183,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
       return result
     }
 
-    console.log(`[StuckJobRecovery] Found ${stuckSessions.length} stuck sessions`)
+    logger.log(`[StuckJobRecovery] Found ${stuckSessions.length} stuck sessions`)
 
     // Process each stuck session
     for (const session of stuckSessions) {
@@ -234,7 +235,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
       }
     }
 
-    console.log(`[StuckJobRecovery] Recovered ${result.recoveredCount} sessions, refunded ${result.refundedCount} credits`)
+    logger.log(`[StuckJobRecovery] Recovered ${result.recoveredCount} sessions, refunded ${result.refundedCount} credits`)
     return result
   } catch (error) {
     result.errors.push({

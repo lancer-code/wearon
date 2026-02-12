@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '../logger'
 
 export type RoleName = 'user' | 'moderator' | 'admin'
 
@@ -32,7 +33,7 @@ export async function checkPermission(
   })
 
   if (error) {
-    console.error('Error checking permission:', error)
+    logger.error('Error checking permission:', error)
     return false
   }
 
@@ -53,7 +54,7 @@ export async function checkRole(
   })
 
   if (error) {
-    console.error('Error checking role:', error)
+    logger.error('Error checking role:', error)
     return false
   }
 
@@ -72,7 +73,7 @@ export async function getUserPermissions(
   })
 
   if (error) {
-    console.error('Error getting user permissions:', error)
+    logger.error('Error getting user permissions:', error)
     return []
   }
 
@@ -91,7 +92,7 @@ export async function getUserRoles(
   })
 
   if (error) {
-    console.error('Error getting user roles:', error)
+    logger.error('Error getting user roles:', error)
     return []
   }
 
@@ -115,7 +116,7 @@ export async function assignRole(
     .single()
 
   if (roleError || !role) {
-    console.error('Error finding role:', roleError)
+    logger.error('Error finding role:', roleError)
     return false
   }
 
@@ -127,7 +128,7 @@ export async function assignRole(
   })
 
   if (error) {
-    console.error('Error assigning role:', error)
+    logger.error('Error assigning role:', error)
     return false
   }
 
@@ -150,7 +151,7 @@ export async function removeRole(
     .single()
 
   if (roleError || !role) {
-    console.error('Error finding role:', roleError)
+    logger.error('Error finding role:', roleError)
     return false
   }
 
@@ -162,7 +163,7 @@ export async function removeRole(
     .eq('role_id', role.id)
 
   if (error) {
-    console.error('Error removing role:', error)
+    logger.error('Error removing role:', error)
     return false
   }
 

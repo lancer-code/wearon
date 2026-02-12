@@ -77,16 +77,16 @@ development_status:
   epic-5-retrospective: optional
 
   # Epic 6: Resell Mode & Shopper Credits
-  epic-6: in-progress
+  epic-6: done
   6-1-billing-mode-configuration: done
   6-2-hidden-shopify-product-creation: done
   6-3-shopify-order-webhook-processing: done
-  6-4-shopper-credit-balance-plugin-flow: review
+  6-4-shopper-credit-balance-plugin-flow: done
   epic-6-retrospective: optional
 
   # Epic 7: Analytics, Admin & Insights
   epic-7: in-progress
-  7-1-store-level-analytics-api: review
+  7-1-store-level-analytics-api: done
   7-2-b2b-admin-analytics-dashboard: review
   7-3-revenue-quality-dashboard: review
   7-4-churn-detection-b2c-admin-analytics: review

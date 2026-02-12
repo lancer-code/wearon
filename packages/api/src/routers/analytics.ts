@@ -1,6 +1,14 @@
 import { z } from 'zod'
 import { router, protectedProcedure, adminProcedure } from '../trpc'
 
+const iso8601DateString = z.string().refine(
+  (val) => {
+    const date = new Date(val)
+    return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(val.substring(0, 10))
+  },
+  { message: 'Must be a valid ISO 8601 date string' },
+)
+
 export const analyticsRouter = router({
   /**
    * Get total generation count (all users)
@@ -198,8 +206,8 @@ export const analyticsRouter = router({
   getB2BOverview: adminProcedure
     .input(
       z.object({
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
+        startDate: iso8601DateString.optional(),
+        endDate: iso8601DateString.optional(),
       }).optional(),
     )
     .query(async ({ input, ctx }) => {
@@ -479,8 +487,8 @@ export const analyticsRouter = router({
   getB2COverview: adminProcedure
     .input(
       z.object({
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
+        startDate: iso8601DateString.optional(),
+        endDate: iso8601DateString.optional(),
       }).optional(),
     )
     .query(async ({ input, ctx }) => {
@@ -589,8 +597,8 @@ export const analyticsRouter = router({
   getRevenueOverview: adminProcedure
     .input(
       z.object({
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
+        startDate: iso8601DateString.optional(),
+        endDate: iso8601DateString.optional(),
       }).optional(),
     )
     .query(async ({ input, ctx }) => {
@@ -698,8 +706,8 @@ export const analyticsRouter = router({
   getQualityMetrics: adminProcedure
     .input(
       z.object({
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
+        startDate: iso8601DateString.optional(),
+        endDate: iso8601DateString.optional(),
       }).optional(),
     )
     .query(async ({ input, ctx }) => {

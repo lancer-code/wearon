@@ -23,6 +23,11 @@ function getServiceClient() {
   return serviceClient
 }
 
+function isValidISO8601(dateString: string): boolean {
+  const date = new Date(dateString)
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(dateString.substring(0, 10))
+}
+
 export async function handleGetAnalytics(request: Request, context: B2BContext) {
   const log = createChildLogger(context.requestId)
   const supabase = getServiceClient()
@@ -30,6 +35,14 @@ export async function handleGetAnalytics(request: Request, context: B2BContext) 
   const url = new URL(request.url)
   const startDate = url.searchParams.get('start_date')
   const endDate = url.searchParams.get('end_date')
+
+  if (startDate && !isValidISO8601(startDate)) {
+    return errorResponse('VALIDATION_ERROR', 'start_date must be a valid ISO 8601 date string', 400)
+  }
+
+  if (endDate && !isValidISO8601(endDate)) {
+    return errorResponse('VALIDATION_ERROR', 'end_date must be a valid ISO 8601 date string', 400)
+  }
 
   // Query generation sessions for stats
   let generationQuery = supabase
@@ -79,8 +92,8 @@ export async function handleGetAnalytics(request: Request, context: B2BContext) 
     completedGenerations,
     failedGenerations,
     successRate,
-    creditsRemaining: (credits?.balance as number) ?? 0,
-    creditsUsed: (credits?.total_spent as number) ?? 0,
+    creditsRemaining: credits?.balance ?? 0,
+    creditsUsed: credits?.total_spent ?? 0,
   })
 }
 

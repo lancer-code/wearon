@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS public.store_credit_transactions (
   type TEXT NOT NULL CHECK (type IN ('deduction', 'refund', 'purchase', 'subscription', 'overage')),
   request_id TEXT,
   description TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- =============================================================================
@@ -88,6 +88,11 @@ RETURNS BOOLEAN AS $$
 DECLARE
   v_current_balance INTEGER;
 BEGIN
+  -- Validate positive amount
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'Amount must be a positive integer, got: %', p_amount;
+  END IF;
+
   -- Get current balance with row lock
   SELECT balance INTO v_current_balance
   FROM public.store_credits
@@ -127,6 +132,11 @@ CREATE OR REPLACE FUNCTION refund_store_credits(
 )
 RETURNS VOID AS $$
 BEGIN
+  -- Validate positive amount
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'Amount must be a positive integer, got: %', p_amount;
+  END IF;
+
   -- Add credits back
   UPDATE public.store_credits
   SET balance = balance + p_amount,

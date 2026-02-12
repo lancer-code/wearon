@@ -190,4 +190,36 @@ describe('stores analytics route', () => {
     expect(response.status).toBe(500)
     expect(payload.error.code).toBe('INTERNAL_ERROR')
   })
+
+  it('GET rejects invalid date format in start_date parameter', async () => {
+    const { handleGetAnalytics } = await import(
+      '../app/api/v1/stores/analytics/route'
+    )
+
+    const request = new Request(
+      'http://localhost/api/v1/stores/analytics?start_date=not-a-date'
+    )
+    const response = await handleGetAnalytics(request, testContext)
+    const payload = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(payload.error.code).toBe('VALIDATION_ERROR')
+    expect(payload.error.message).toContain('start_date')
+  })
+
+  it('GET rejects invalid date format in end_date parameter', async () => {
+    const { handleGetAnalytics } = await import(
+      '../app/api/v1/stores/analytics/route'
+    )
+
+    const request = new Request(
+      'http://localhost/api/v1/stores/analytics?end_date=invalid-date'
+    )
+    const response = await handleGetAnalytics(request, testContext)
+    const payload = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(payload.error.code).toBe('VALIDATION_ERROR')
+    expect(payload.error.message).toContain('end_date')
+  })
 })

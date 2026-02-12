@@ -1,6 +1,6 @@
 # Story 7.3: Revenue & Quality Dashboard
 
-Status: review
+Status: done
 
 ## Story
 
@@ -43,6 +43,10 @@ so that **I can track business health, margins, and generation quality**.
   - [x] 4.2 Test quality metrics combines B2B and B2C data correctly.
   - [x] 4.3 Test date-range filtering works for both endpoints.
   - [x] 4.4 Test admin-only access.
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][INFO] Both endpoints (`getRevenueOverview` and `getQualityMetrics`) already use `iso8601DateString.optional()` for date validation - this was fixed proactively during Story 7.2 review when the global `replace_all` applied the date validator to all analytics endpoints. [packages/api/src/routers/analytics.ts:600-601,709-710] **VERIFIED 2026-02-13**: No action needed. All 14 tests passing. Story complete.
 
 ## Dev Notes
 
@@ -111,3 +115,4 @@ Claude Opus 4.6
 ## Change Log
 
 - 2026-02-12: Implemented all 4 tasks (revenue endpoints, quality endpoints, dashboard UI, tests).
+- 2026-02-13: Code review confirmed date validation already in place (fixed during Story 7.2 global replace). All 14 tests passing. Story marked done.

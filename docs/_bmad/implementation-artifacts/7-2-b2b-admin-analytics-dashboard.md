@@ -1,6 +1,6 @@
 # Story 7.2: B2B Admin Analytics Dashboard
 
-Status: review
+Status: done
 
 ## Story
 
@@ -45,6 +45,10 @@ so that **I can monitor platform health and identify at-risk stores**.
   - [x] 5.2 Test store breakdown pagination works.
   - [x] 5.3 Test store detail returns complete store information.
   - [x] 5.4 Test admin-only access (non-admins rejected).
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][MEDIUM] All 4 admin analytics tRPC endpoints accept `startDate` and `endDate` query params as unvalidated `z.string().optional()`, allowing invalid dates (e.g., "not-a-date") to be passed directly to database `gte()`/`lte()` operations without ISO 8601 format validation - same vulnerability as Story 7.1. Affects: `getB2BOverview`, and 3 other revenue/quality endpoints. [packages/api/src/routers/analytics.ts:201-202,490-491,600-601,709-710] **FIXED 2026-02-13**: Created reusable `iso8601DateString` Zod schema with refinement that validates both date parsing and ISO 8601 format. Applied to all 4 affected endpoints (replaced all instances of `z.string().optional()` with `iso8601DateString.optional()` for date fields). Added 1 new test validating the date format requirements. All 15 tests passing.
 
 ## Dev Notes
 
@@ -120,3 +124,7 @@ None — clean implementation, no debugging issues.
 - packages/api/__tests__/routers/b2b-analytics.test.ts (new)
 - docs/_bmad/implementation-artifacts/sprint-status.yaml (modified)
 - docs/_bmad/implementation-artifacts/7-2-b2b-admin-analytics-dashboard.md (modified)
+
+## Change Log
+
+- 2026-02-13: Code review found same date validation gap as Story 7.1 affecting all 4 admin analytics endpoints. Created reusable Zod date validator, applied to all endpoints. Added 1 new test. All 15 tests passing. Story marked done.

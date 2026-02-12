@@ -1,6 +1,6 @@
 # Story 7.4: Churn Detection & B2C Admin Analytics
 
-Status: review
+Status: done
 
 ## Story
 

@@ -87,8 +87,8 @@ development_status:
   # Epic 7: Analytics, Admin & Insights
   epic-7: in-progress
   7-1-store-level-analytics-api: done
-  7-2-b2b-admin-analytics-dashboard: review
-  7-3-revenue-quality-dashboard: review
+  7-2-b2b-admin-analytics-dashboard: done
+  7-3-revenue-quality-dashboard: done
   7-4-churn-detection-b2c-admin-analytics: review
   epic-7-retrospective: optional
 

@@ -1,0 +1,195 @@
+import crypto from 'node:crypto'
+import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import { logger } from '../../../../../../../../packages/api/src/logger'
+import { completeAuth, getShopOwnerEmail } from '../../../../../../../../packages/api/src/services/shopify'
+import { encrypt } from '../../../../../../../../packages/api/src/utils/encryption'
+
+function getAdminSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  return createClient(supabaseUrl, serviceKey)
+}
+
+async function linkSupabaseUser(
+  supabase: ReturnType<typeof createClient>,
+  shopDomain: string,
+  accessToken: string,
+  storeId: string,
+) {
+  const ownerEmail = await getShopOwnerEmail(shopDomain, accessToken)
+  if (!ownerEmail) {
+    logger.warn({ shop: shopDomain }, '[Shopify OAuth] Could not fetch shop owner email, skipping auth linkage')
+    return
+  }
+
+  // Check if Supabase auth user already exists with this email
+  const { data: existingUsers } = await supabase.auth.admin.listUsers()
+  const existingUser = existingUsers?.users?.find((u) => u.email === ownerEmail)
+
+  let userId: string
+
+  if (existingUser) {
+    userId = existingUser.id
+  } else {
+    // Create a new Supabase Auth user for the store owner
+    const tempPassword = crypto.randomBytes(32).toString('hex')
+    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+      email: ownerEmail,
+      password: tempPassword,
+      email_confirm: true,
+      user_metadata: { shop_domain: shopDomain, store_id: storeId },
+    })
+
+    if (createError || !newUser?.user) {
+      logger.error({ err: createError?.message, shop: shopDomain }, '[Shopify OAuth] Supabase user creation failed')
+      return
+    }
+
+    userId = newUser.user.id
+  }
+
+  // Link store to Supabase user
+  await supabase
+    .from('stores')
+    .update({ owner_user_id: userId })
+    .eq('id', storeId)
+
+  logger.info({ storeId, userId, shop: shopDomain }, '[Shopify OAuth] Supabase user linked to store')
+}
+
+function generateApiKey(): { plaintext: string; hash: string } {
+  const randomHex = crypto.randomBytes(16).toString('hex')
+  const plaintext = `wk_${randomHex}`
+  const hash = crypto.createHash('sha256').update(plaintext).digest('hex')
+  return { plaintext, hash }
+}
+
+export async function GET(request: Request) {
+  try {
+    const callbackResult = await completeAuth(request)
+    const { session } = callbackResult
+
+    if (!session?.accessToken || !session?.shop) {
+      logger.error('[Shopify OAuth] Callback missing session data')
+      return NextResponse.json(
+        { data: null, error: { code: 'INTERNAL_ERROR', message: 'OAuth callback failed' } },
+        { status: 500 },
+      )
+    }
+
+    const shopDomain = session.shop
+    const accessToken = session.accessToken
+
+    logger.info({ shop: shopDomain }, '[Shopify OAuth] Callback received')
+
+    const supabase = getAdminSupabase()
+
+    // Check if store already exists (re-installation case — handled in Task 4)
+    const { data: existingStore } = await supabase
+      .from('stores')
+      .select('id')
+      .eq('shop_domain', shopDomain)
+      .single()
+
+    const encryptedToken = encrypt(accessToken)
+
+    let storeId: string
+
+    if (existingStore) {
+      // Re-installation: update existing store
+      const { error: updateError } = await supabase
+        .from('stores')
+        .update({
+          access_token_encrypted: encryptedToken,
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingStore.id)
+
+      if (updateError) {
+        logger.error({ err: updateError.message, shop: shopDomain }, '[Shopify OAuth] Store update failed')
+        return NextResponse.json(
+          { data: null, error: { code: 'INTERNAL_ERROR', message: 'Store update failed' } },
+          { status: 500 },
+        )
+      }
+
+      // Re-activate API keys
+      await supabase
+        .from('store_api_keys')
+        .update({ is_active: true })
+        .eq('store_id', existingStore.id)
+
+      storeId = existingStore.id
+      logger.info({ storeId, shop: shopDomain }, '[Shopify OAuth] Store re-activated')
+
+      // Re-link Supabase Auth user on re-installation
+      await linkSupabaseUser(supabase, shopDomain, accessToken, storeId)
+    } else {
+      // New store registration
+      const { data: storeData, error: storeError } = await supabase
+        .from('stores')
+        .insert({
+          shop_domain: shopDomain,
+          access_token_encrypted: encryptedToken,
+          status: 'active',
+          billing_mode: 'absorb_mode',
+          onboarding_completed: false,
+        })
+        .select('id')
+        .single()
+
+      if (storeError || !storeData) {
+        logger.error({ err: storeError?.message, shop: shopDomain }, '[Shopify OAuth] Store creation failed')
+        return NextResponse.json(
+          { data: null, error: { code: 'INTERNAL_ERROR', message: 'Store registration failed' } },
+          { status: 500 },
+        )
+      }
+
+      storeId = storeData.id
+
+      // Generate API key
+      const apiKey = generateApiKey()
+      const { error: keyError } = await supabase.from('store_api_keys').insert({
+        store_id: storeId,
+        key_hash: apiKey.hash,
+        label: 'Default API Key',
+        allowed_domains: [shopDomain],
+        is_active: true,
+      })
+
+      if (keyError) {
+        logger.error({ err: keyError.message, storeId }, '[Shopify OAuth] API key creation failed')
+      }
+
+      // store_credits row auto-created by database trigger (Story 1.1)
+
+      logger.info({ storeId, shop: shopDomain }, '[Shopify OAuth] New store registered')
+
+      // Link Supabase Auth user to store
+      await linkSupabaseUser(supabase, shopDomain, accessToken, storeId)
+
+      // Store the plaintext API key temporarily in session for onboarding display
+      // This is the ONLY time the plaintext key is available
+      const redirectUrl = new URL('/merchant/onboarding', process.env.SHOPIFY_APP_URL || request.url)
+      redirectUrl.searchParams.set('store_id', storeId)
+      redirectUrl.searchParams.set('api_key', apiKey.plaintext)
+
+      return NextResponse.redirect(redirectUrl.toString())
+    }
+
+    // Re-installation redirect (no new API key shown)
+    const redirectUrl = new URL('/merchant/onboarding', process.env.SHOPIFY_APP_URL || request.url)
+    redirectUrl.searchParams.set('store_id', storeId)
+
+    return NextResponse.redirect(redirectUrl.toString())
+  } catch (error) {
+    logger.error({ err: error instanceof Error ? error.message : 'Unknown error' }, '[Shopify OAuth] Callback error')
+    return NextResponse.json(
+      { data: null, error: { code: 'INTERNAL_ERROR', message: 'OAuth callback failed' } },
+      { status: 500 },
+    )
+  }
+}

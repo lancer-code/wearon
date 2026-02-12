@@ -1,2 +1,7 @@
 export { appRouter, type AppRouter } from './routers/_app'
 export { createContext, type Context } from './trpc'
+export { logger, createChildLogger } from './logger'
+export { withB2BAuth, authenticateApiKey, checkCors, checkRateLimit } from './middleware'
+export type { B2BContext, B2BErrorCode, B2BResponse, RateLimitTier, RateLimitHeaders } from './types/b2b'
+export { RATE_LIMIT_TIERS } from './types/b2b'
+export { successResponse, errorResponse, unauthorizedResponse, forbiddenResponse } from './utils/b2b-response'

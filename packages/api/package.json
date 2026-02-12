@@ -7,17 +7,16 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "lint": "biome check .",
-    "worker": "tsx src/workers/generation.worker.ts",
-    "worker:dev": "tsx watch src/workers/generation.worker.ts"
+    "lint": "biome check ."
   },
   "dependencies": {
+    "@shopify/shopify-api": "^12.3.0",
     "@supabase/supabase-js": "^2.48.1",
     "@trpc/server": "^11.0.0",
-    "bullmq": "^5.66.4",
     "dotenv": "^17.2.3",
     "form-data": "^4.0.5",
     "ioredis": "^5.9.0",
+    "pino": "^9.6.0",
     "sharp": "^0.34.5",
     "superjson": "^2.2.2",
     "zod": "^3.24.1"
@@ -25,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^25.0.3",
     "@types/sharp": "^0.32.0",
+    "pino-pretty": "^13.0.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "~5.8.3"

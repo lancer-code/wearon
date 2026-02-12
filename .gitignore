@@ -48,3 +48,7 @@ thumbs.db
 
 # turbo build log
 **/.turbo/*
+
+# sibling repos (created in same parent folder, separate git repos)
+/wearon-shopify
+/wearon-worker

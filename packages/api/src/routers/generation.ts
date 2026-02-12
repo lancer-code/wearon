@@ -1,6 +1,10 @@
+import crypto from 'node:crypto'
+import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
+import { pushGenerationTask } from '../services/redis-queue'
 import { router, protectedProcedure } from '../trpc'
-import { addGenerationJob, getJobStatus } from '../services/queue'
+import { TASK_PAYLOAD_VERSION } from '../types/queue'
+import type { GenerationTaskPayload } from '../types/queue'
 
 // Default system prompt for virtual try-on with OpenAI GPT Image 1.5
 const DEFAULT_SYSTEM_PROMPT = `Virtual try-on: Using the provided images:
@@ -76,7 +80,7 @@ export const generationRouter = router({
         .from('generation_sessions')
         .insert({
           user_id: userId,
-          status: 'pending',
+          status: 'queued',
           model_image_url: input.modelImageUrl,
           outfit_image_url: input.outfitImageUrl,
           accessories: input.accessories || [],
@@ -98,16 +102,32 @@ export const generationRouter = router({
 
       const sessionId = sessionData.id
 
-      // Add job to queue
+      // Build image_urls array: model first, outfit second, accessories after
+      const imageUrls: string[] = [input.modelImageUrl]
+      if (input.outfitImageUrl) {
+        imageUrls.push(input.outfitImageUrl)
+      }
+      if (input.accessories) {
+        for (const accessory of input.accessories) {
+          imageUrls.push(accessory.url)
+        }
+      }
+
+      const taskPayload: GenerationTaskPayload = {
+        taskId: crypto.randomUUID(),
+        channel: 'b2c',
+        userId,
+        sessionId,
+        imageUrls,
+        prompt: DEFAULT_SYSTEM_PROMPT,
+        requestId: `req_${crypto.randomUUID()}`,
+        version: TASK_PAYLOAD_VERSION,
+        createdAt: new Date().toISOString(),
+      }
+
+      // Push to Redis queue
       try {
-        await addGenerationJob({
-          sessionId,
-          userId,
-          modelImageUrl: input.modelImageUrl,
-          outfitImageUrl: input.outfitImageUrl,
-          accessories: input.accessories,
-          promptSystem: DEFAULT_SYSTEM_PROMPT,
-        })
+        await pushGenerationTask(taskPayload)
 
         // Log analytics event
         await ctx.supabase.from('analytics_events').insert({
@@ -122,7 +142,7 @@ export const generationRouter = router({
 
         return {
           sessionId,
-          status: 'pending',
+          status: 'queued',
           message: 'Generation job queued successfully',
         }
       } catch (error) {
@@ -138,7 +158,10 @@ export const generationRouter = router({
           .update({ status: 'failed', error_message: 'Failed to queue job' })
           .eq('id', sessionId)
 
-        throw new Error('Failed to queue generation job')
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Generation service temporarily unavailable',
+        })
       }
     }),
 
@@ -164,15 +187,6 @@ export const generationRouter = router({
         throw new Error('Generation session not found')
       }
 
-      // Also get job status from queue for active jobs
-      if (data.status === 'pending' || data.status === 'processing') {
-        const jobStatus = await getJobStatus(input.sessionId)
-        return {
-          ...data,
-          jobStatus,
-        }
-      }
-
       return data
     }),
 
@@ -181,7 +195,7 @@ export const generationRouter = router({
       z.object({
         limit: z.number().int().min(1).max(50).default(20),
         offset: z.number().int().min(0).default(0),
-        status: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
+        status: z.enum(['queued', 'processing', 'completed', 'failed']).optional(),
       })
     )
     .query(async ({ input, ctx }) => {
@@ -231,7 +245,7 @@ export const generationRouter = router({
       .from('generation_sessions')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', ctx.user.id)
-      .in('status', ['pending', 'processing'])
+      .in('status', ['queued', 'processing'])
 
     if (countError || completedError || activeError) {
       throw new Error('Failed to fetch generation statistics')

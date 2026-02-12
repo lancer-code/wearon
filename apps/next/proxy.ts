@@ -34,7 +34,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Protected routes - redirect to login if not authenticated
-  if ((pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) && !user) {
+  if ((pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.startsWith('/merchant')) && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
@@ -65,5 +65,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/login', '/signup'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/merchant/:path*', '/login', '/signup'],
 }

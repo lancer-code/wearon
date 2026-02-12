@@ -76,6 +76,15 @@ so that **size recommendations are based on accurate AI pose estimation**.
 - [Source: architecture.md#Repo 3: wearon-worker] — Worker project structure
 - [Source: epics.md#Story 5.4] — MediaPipe Pose Estimation Service
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

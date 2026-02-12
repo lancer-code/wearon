@@ -87,6 +87,15 @@ so that **credits are added to shopper balances reliably and idempotently**.
 - [Source: architecture.md#Resilience & Failure Handling] — Webhook reliability patterns
 - [Source: epics.md#Story 6.3] — Shopify Order Webhook Processing
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

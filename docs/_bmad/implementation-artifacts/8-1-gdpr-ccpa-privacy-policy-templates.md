@@ -64,6 +64,15 @@ so that **I can comply with data privacy regulations when offering try-on featur
 - [Source: architecture.md#Privacy & Compliance] — GDPR/CCPA, 6-hour auto-delete
 - [Source: epics.md#Story 8.1] — GDPR/CCPA Privacy Policy Templates
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

@@ -162,7 +162,7 @@ classification:
 **Resell mode (store charges):**
 1. Taps "Try On" → quick signup (email/Google) on widget
 2. Sees pricing: "1 try-on: $0.50" or "5 pack: $1.50"
-3. Pays via store's Stripe → gets credits → same experience
+3. Pays via store's checkout → gets credits → same experience
 
 **Climax:** Size rec: "Recommended: M." Try-on: sees herself in the dress. "92% of similar body types chose M."
 
@@ -383,10 +383,10 @@ API Developer journey (custom integration via raw REST API) moved to **Vision/Fu
 
 ### Resell Mode (Simplified)
 
-No Stripe Connect needed. Store already has payment processing via Shopify. Flow:
+No external payment gateway needed for resell mode. Store already has payment processing via Shopify. Flow:
 1. Store configures resell mode + retail price in WearOn dashboard
 2. Plugin creates "Try-On Credit" as digital product in store's Shopify catalog
-3. Shopper purchases through store's normal checkout (store's Stripe)
+3. Shopper purchases through store's normal Shopify checkout
 4. Shopify order webhook → plugin confirms payment → calls WearOn API
 5. 1 credit deducted from store's pool → generation runs
 6. Store keeps 100% of shopper payment. WearOn already paid via wholesale credits.

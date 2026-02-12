@@ -158,7 +158,7 @@ This document provides the complete epic and story breakdown for WearOn, decompo
 - AR4: MediaPipe for size rec on Python worker — FastAPI HTTP endpoint, 33 3D body landmarks, model loaded once on startup
 - AR5: B2B REST API at /api/v1/* alongside existing B2C tRPC — reuses packages/api service layer
 - AR6: Full B2B table separation — stores, store_credits, store_credit_transactions, store_generation_sessions, store_analytics_events, store_api_keys, store_shopper_credits, store_shopper_purchases (no shared tables with B2C)
-- AR7: Free Connector App Pattern — plugin free on Shopify App Store, billing via Stripe on WearOn platform (no Shopify Billing API, no 20% rev share)
+- AR7: Free Connector App Pattern — plugin free on Shopify App Store, billing on WearOn platform (payment provider TBD, no Shopify Billing API, no 20% rev share)
 - AR8: Application-level scoping for B2B — service role key + store_id in WHERE clauses (no RLS for B2B)
 - AR9: Feature flag USE_PYTHON_WORKER for B2C migration — toggles between BullMQ and Redis queue, run both workers in parallel during transition
 - AR10: Task payload version field for backward-compatible migrations — worker handles both old and new task formats
@@ -166,7 +166,7 @@ This document provides the complete epic and story breakdown for WearOn, decompo
 - AR12: snake_case at all data boundaries — API JSON, Redis payloads, DB columns; camelCase internally in TypeScript
 - AR13: Structured logging — pino for TypeScript, structlog for Python; no console.log
 - AR14: Shopify OAuth for merchant authentication + separate WearOn platform auth (Supabase) for onboarding/billing
-- AR15: Stripe billing on WearOn platform — subscriptions + PAYG (not Shopify Billing API)
+- AR15: Billing on WearOn platform — subscriptions + PAYG (payment provider TBD, not Shopify Billing API)
 - AR16: Implementation sequence: DB migrations → Python worker → B2C migration → B2B API → Queue integration → Shopify skeleton → OAuth → Plugin UI → Billing → Resell mode
 
 **From Brainstorming & Project Context:**
@@ -549,7 +549,9 @@ So that **store credit balances are always accurate and generation costs are tra
 **When** B2C users purchase credits or receive free starter credits
 **Then** these continue to work unchanged through existing tRPC endpoints
 
-### Story 3.2: Stripe Subscription & PAYG Integration
+### Story 3.2: Payment Integration (Subscription & PAYG) — ON HOLD
+
+> **Payment provider is TBD. Stripe will NOT be used. This story is on hold.**
 
 As a **store owner**,
 I want **to subscribe to a credit plan or buy pay-as-you-go packs**,
@@ -557,23 +559,23 @@ So that **I can fund my store's try-on feature with the pricing model that fits 
 
 **Acceptance Criteria:**
 
-**Given** the billing page at `/(merchant)/billing`
+**Given** the billing page at `/merchant/billing`
 **When** a store owner selects a subscription tier (Starter $49/350, Growth $99/800, Scale $199/1800)
-**Then** a Stripe Checkout session is created for the recurring subscription
+**Then** a checkout session is created via the chosen payment provider
 **And** on successful payment, `store_credits` balance is incremented by the tier's credit allocation
 **And** the store's `subscription_tier` and `subscription_id` are stored in the `stores` table
 
 **Given** the billing page
 **When** a store owner selects a PAYG credit pack
-**Then** a Stripe Checkout session is created for the one-time purchase at $0.18/credit
+**Then** a one-time checkout session is created at $0.18/credit
 **And** on successful payment, credits are added to `store_credits`
 
-**Given** a Stripe webhook for subscription renewal
+**Given** a webhook for subscription renewal
 **When** payment succeeds
 **Then** the store's credit balance is topped up by the tier allocation
 **And** a credit transaction is logged
 
-**Given** a Stripe webhook for payment failure
+**Given** a webhook for payment failure
 **When** subscription payment fails
 **Then** the store is notified and given a grace period before credits are paused
 
@@ -587,7 +589,7 @@ So that **my store never runs out of credits unexpectedly**.
 
 **Given** a store on a subscription plan
 **When** the owner requests an upgrade (e.g., Starter → Growth)
-**Then** the change is processed via Stripe with prorated billing
+**Then** the change is processed via the payment provider with prorated billing
 **And** the `stores.subscription_tier` is updated
 **And** additional credits from the new tier are added immediately
 

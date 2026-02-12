@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import type { B2BErrorCode } from '../types/b2b'
 import { toSnakeCase } from './snake-case'
 
-export function successResponse<T>(data: T): NextResponse {
-  return NextResponse.json({ data: toSnakeCase(data), error: null })
+export function successResponse<T>(data: T, status = 200): NextResponse {
+  return NextResponse.json({ data: toSnakeCase(data), error: null }, { status })
 }
 
 export function errorResponse(code: B2BErrorCode, message: string, status: number): NextResponse {

@@ -62,6 +62,15 @@ so that **I understand how reliable the recommendation is**.
 - [Source: epics.md#Story 5.3] — Size Rec Display & Confidence
 - [Source: architecture.md#NFR21-NFR22] — Contrast and touch target requirements
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

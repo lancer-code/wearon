@@ -46,7 +46,7 @@ so that **I can either offer free try-ons or sell credits to shoppers for profit
 
 ### Architecture Requirements
 
-- **ADR-5**: Free Connector App Pattern — billing via Stripe on WearOn platform. [Source: architecture.md#ADR-5]
+- **ADR-5**: Free Connector App Pattern — billing on WearOn platform (payment provider TBD). [Source: architecture.md#ADR-5]
 - **FR3**: Store owner can configure billing mode (absorb/resell).
 - **FR4**: Store owner can set retail credit price in resell mode.
 - Billing mode stored as enum in `stores.billing_mode` column: `absorb_mode` (default) or `resell_mode`.
@@ -74,6 +74,15 @@ so that **I can either offer free try-ons or sell credits to shoppers for profit
 - [Source: architecture.md#Resell Mode Architecture] — Credit flow details
 - [Source: architecture.md#Absorb Mode Architecture] — Absorb mode flow
 - [Source: epics.md#Story 6.1] — Billing Mode Configuration
+
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
 
 ## Dev Agent Record
 

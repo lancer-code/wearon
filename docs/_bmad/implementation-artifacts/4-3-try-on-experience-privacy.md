@@ -48,6 +48,15 @@ so that **I feel confident and safe using the try-on feature**.
 - [Source: architecture.md#FP-4] — Shopper Login Required
 - [Source: architecture.md#ADR-3] — Plugin Architecture
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

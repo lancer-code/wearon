@@ -85,6 +85,15 @@ so that **my store is registered on the WearOn platform and I can start configur
 - [Source: architecture.md#Shopify OAuth] — OAuth flow details
 - [Source: project-context.md#Security Rules] — API key format, AES-256 encryption
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

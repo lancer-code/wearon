@@ -67,6 +67,15 @@ so that **shoppers can purchase credits through my store's existing checkout**.
 - [Source: architecture.md#ADR-5] — Free Connector App Pattern
 - [Source: epics.md#Story 6.2] — Hidden Shopify Product Creation
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

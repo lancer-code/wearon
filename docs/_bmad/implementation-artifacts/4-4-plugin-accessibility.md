@@ -49,6 +49,15 @@ so that **I can use virtual try-on regardless of my abilities**.
 - [Source: architecture.md#NFR18-NFR23] — Accessibility requirements
 - [Source: epics.md#Epic 4] — Accessibility NFRs
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

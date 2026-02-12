@@ -67,6 +67,15 @@ so that **I can track ROI and optimize my try-on investment**.
 - [Source: architecture.md#FR Category → Structure Mapping] — Analytics category
 - [Source: epics.md#Story 7.1] — Store-Level Analytics API
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

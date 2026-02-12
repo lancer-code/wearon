@@ -55,14 +55,14 @@ development_status:
 
   # Epic 3: Credit System & Merchant Billing
   epic-3: in-progress
-  3-1-b2b-store-credit-operations: ready-for-dev
-  3-2-stripe-subscription-payg-integration: ready-for-dev
-  3-3-subscription-management-overage: ready-for-dev
+  3-1-b2b-store-credit-operations: review
+  3-2-stripe-subscription-payg-integration: on-hold  # Payment provider TBD — Stripe will NOT be used
+  3-3-subscription-management-overage: on-hold  # Blocked by 3-2 — payment provider TBD
   epic-3-retrospective: optional
 
   # Epic 4: Shopify Plugin Storefront & Virtual Try-On
   epic-4: in-progress
-  4-1-b2b-generation-rest-api-endpoints: ready-for-dev
+  4-1-b2b-generation-rest-api-endpoints: review
   4-2-plugin-theme-app-extension-core: ready-for-dev
   4-3-try-on-experience-privacy: ready-for-dev
   4-4-plugin-accessibility: ready-for-dev

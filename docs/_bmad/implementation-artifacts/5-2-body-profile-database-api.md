@@ -63,6 +63,15 @@ so that **I get instant size recommendations without re-uploading every time**.
 - [Source: epics.md#Story 5.2] — Body Profile Database & API
 - [Source: architecture.md#Data Architecture] — Migration approach
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

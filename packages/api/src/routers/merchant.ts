@@ -1,5 +1,4 @@
 import crypto from 'node:crypto'
-import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { router, protectedProcedure } from '../trpc'
 import { logger } from '../logger'

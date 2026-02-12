@@ -79,6 +79,15 @@ so that **I can pay for the try-on experience through the store's checkout**.
 - [Source: architecture.md#ADR-3] — Plugin Architecture (server-side proxy pattern)
 - [Source: epics.md#Story 6.4] — Shopper Credit Balance & Plugin Flow
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

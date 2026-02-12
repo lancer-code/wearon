@@ -57,19 +57,28 @@ so that **I can track business health, margins, and generation quality**.
 - B2B revenue: sum of `store_credit_transactions` WHERE `type = 'purchase'`.
 - B2C revenue: sum of `credit_transactions` WHERE `type = 'purchase'`.
 - OpenAI costs: generation count * configurable rate (stored in admin settings or env var).
-- This is an estimate — exact Stripe revenue available via Stripe Dashboard.
+- This is an estimate — exact revenue tracking depends on payment provider (TBD).
 
 ### Dependencies
 
 - Story 7.1: `store_analytics_events` for event-based metrics.
 - Story 7.2: Admin panel infrastructure (sidebar, layout).
-- Story 3.2: Stripe integration (credit purchases recorded in transaction tables).
+- Story 3.2: Payment integration — on-hold, payment provider TBD (credit purchases recorded in transaction tables).
 - Existing B2C tables: `generation_sessions`, `credit_transactions`.
 
 ### References
 
 - [Source: architecture.md#Analytics Segmentation] — Three views (merchant, B2C user, platform admin)
 - [Source: epics.md#Story 7.3] — Revenue & Quality Dashboard
+
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
 
 ## Dev Agent Record
 

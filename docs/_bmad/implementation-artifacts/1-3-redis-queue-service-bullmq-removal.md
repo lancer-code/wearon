@@ -170,6 +170,15 @@ This matches the Python worker's expectation: first image = model, second = outf
 - [Source: packages/api/src/routers/generation.ts] — B2C generation router (to be updated)
 - [Source: packages/api/package.json] — Current deps: bullmq ^5.66.4, ioredis ^5.9.0
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

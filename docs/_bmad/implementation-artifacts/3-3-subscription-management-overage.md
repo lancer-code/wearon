@@ -1,6 +1,8 @@
 # Story 3.3: Subscription Management & Overage
 
-Status: ready-for-dev
+Status: on-hold
+
+> **IMPORTANT: Blocked by Story 3.2.** Payment provider is TBD. This story depends on payment integration and will be updated once the provider is chosen.
 
 ## Story
 
@@ -10,7 +12,7 @@ so that **my store never runs out of credits unexpectedly**.
 
 ## Acceptance Criteria
 
-1. **Given** a store on a subscription plan, **When** the owner requests an upgrade (e.g., Starter → Growth), **Then** the change is processed via Stripe with prorated billing **And** the `stores.subscription_tier` is updated **And** additional credits from the new tier are added immediately.
+1. **Given** a store on a subscription plan, **When** the owner requests an upgrade (e.g., Starter → Growth), **Then** the change is processed via the payment provider with prorated billing **And** the `stores.subscription_tier` is updated **And** additional credits from the new tier are added immediately.
 
 2. **Given** a store on a subscription plan, **When** the owner requests a downgrade, **Then** the change takes effect at the next billing cycle **And** existing credits remain usable.
 
@@ -18,17 +20,19 @@ so that **my store never runs out of credits unexpectedly**.
 
 ## Tasks / Subtasks
 
+> All tasks are on hold pending payment provider decision (Story 3.2).
+
 - [ ] Task 1: Implement plan upgrade/downgrade (AC: #1, #2)
-  - [ ] 1.1 Create tRPC endpoint `merchant.changePlan` — accepts target tier, calls Stripe API to modify subscription.
-  - [ ] 1.2 For upgrades: use `proration_behavior: 'always_invoice'` in Stripe. Add delta credits immediately.
-  - [ ] 1.3 For downgrades: use `proration_behavior: 'none'`, schedule change at period end.
+  - [ ] 1.1 Create tRPC endpoint `merchant.changePlan` — accepts target tier, calls payment provider API to modify subscription.
+  - [ ] 1.2 For upgrades: prorate billing, add delta credits immediately.
+  - [ ] 1.3 For downgrades: schedule change at period end.
   - [ ] 1.4 Update `stores.subscription_tier` on successful change.
 
 - [ ] Task 2: Implement overage billing (AC: #3)
   - [ ] 2.1 Define overage rates per tier: `{ starter: 16, growth: 14, scale: 12 }` (cents per credit).
-  - [ ] 2.2 In B2B generation flow, when `store_credits.balance <= 0` AND store has active subscription: create Stripe usage record instead of rejecting.
+  - [ ] 2.2 In B2B generation flow, when `store_credits.balance <= 0` AND store has active subscription: create usage record via payment provider instead of rejecting.
   - [ ] 2.3 Log overage in `store_credit_transactions` with `type: 'overage'`.
-  - [ ] 2.4 Track overage usage on Stripe metered billing component.
+  - [ ] 2.4 Track overage usage via payment provider metered billing.
 
 - [ ] Task 3: Billing page UI updates (AC: #1, #2, #3)
   - [ ] 3.1 Show current plan with upgrade/downgrade buttons.
@@ -43,18 +47,27 @@ so that **my store never runs out of credits unexpectedly**.
 
 ### Dependencies
 
-- Story 3.2: Stripe integration, subscription creation.
+- Story 3.2: Payment integration (on-hold — payment provider TBD).
 - Story 3.1: Credit operations.
 
 ### Overage Design
 
 - Overage only applies to stores with active subscriptions. PAYG-only stores get 402 when balance is 0.
-- Stripe metered billing component attached to subscription for overage tracking.
+- Metered billing component attached to subscription for overage tracking.
 
 ### References
 
 - [Source: architecture.md#ADR-5] — Billing model
 - [Source: epics.md#Story 3.3] — Overage rates per tier
+
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
 
 ## Dev Agent Record
 

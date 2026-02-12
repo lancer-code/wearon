@@ -65,6 +65,15 @@ so that **I can order the right size and avoid returns**.
 - [Source: architecture.md#Resilience & Failure Handling] — Size Rec Proxy failure handling
 - [Source: epics.md#Epic 5] — Size Recommendation stories
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

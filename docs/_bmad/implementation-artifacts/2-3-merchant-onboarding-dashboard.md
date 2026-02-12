@@ -25,7 +25,7 @@ so that **I can get started quickly and manage my WearOn integration**.
 
 - [x] Task 2: Create onboarding flow (AC: #1)
   - [x] 2.1 Step 1: Confirm store details (shop domain, store name). Pre-filled from Shopify OAuth data.
-  - [x] 2.2 Step 2: Add payment method via Stripe setup. Placeholder — Stripe integration deferred to Story 3.2.
+  - [x] 2.2 Step 2: Add payment method. Placeholder — payment provider TBD, deferred to Story 3.2.
   - [x] 2.3 Step 3: Review plugin status. Show API key (full, one-time display from OAuth redirect), installation instructions.
   - [x] 2.4 On completion, set `stores.onboarding_completed = true` via `merchant.completeOnboarding` mutation.
 
@@ -55,7 +55,7 @@ so that **I can get started quickly and manage my WearOn integration**.
 
 - Story 2.2: OAuth creates the store record and initial API key.
 - Story 1.1: Database tables.
-- Stripe SDK needed for payment method setup (added in Story 3.2 but setup link here).
+- Payment provider TBD — payment method setup deferred to Story 3.2.
 
 ### Existing Patterns
 
@@ -68,6 +68,15 @@ so that **I can get started quickly and manage my WearOn integration**.
 - [Source: architecture.md#FP-3] — Merchant Dashboard
 - [Source: architecture.md#Project Structure] — /(merchant)/ route group
 - [Source: packages/app/features/admin/] — Existing admin layout pattern to follow
+
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
 
 ## Dev Agent Record
 
@@ -89,7 +98,7 @@ Claude Opus 4.6
 - Merchant router uses `protectedProcedure` with `adminSupabase` for store lookups via `owner_user_id` (from Story 2.2)
 - API key masking: shows first 8 chars of key hash as `wk_xxxxxxxx...****` — never reveals full key
 - API key regeneration: deactivates all old keys, generates new wk_ key, SHA-256 hashes, stores, returns plaintext ONCE
-- Onboarding Step 2 (payment method) shows placeholder since Stripe integration is deferred to Story 3.2
+- Onboarding Step 2 (payment method) shows placeholder since payment provider is TBD (deferred to Story 3.2)
 - Onboarding Step 3 displays full API key from OAuth redirect URL params (one-time display)
 - Dashboard includes: store overview cards, masked API key with show/hide/copy/regenerate, store configuration details
 - Route protection added to `proxy.ts` for `/merchant/*` — requires Supabase Auth
@@ -99,7 +108,7 @@ Claude Opus 4.6
 | Change | Reason |
 |--------|--------|
 | Used `/merchant/` URL path instead of `(merchant)` route group | Story 2.2 OAuth callback redirects to `/merchant/onboarding` — using route group would produce `/onboarding` URL, breaking the redirect |
-| Stripe payment step shows placeholder | Stripe SDK and integration are part of Story 3.2 — not available yet. Step shows "skip for now" message |
+| Payment step shows placeholder | Payment provider is TBD (Story 3.2 on-hold). Step shows "skip for now" message |
 | Added `getCreditBalance` and `completeOnboarding` endpoints | Required by dashboard and onboarding UI but not explicitly listed as separate tasks — natural extensions of Tasks 3 and 4 |
 
 ### File List

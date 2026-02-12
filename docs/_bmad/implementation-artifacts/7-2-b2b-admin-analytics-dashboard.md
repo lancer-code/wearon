@@ -74,6 +74,15 @@ so that **I can monitor platform health and identify at-risk stores**.
 - [Source: architecture.md#Project Structure] — Admin panel location
 - [Source: epics.md#Story 7.2] — B2B Admin Analytics Dashboard
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

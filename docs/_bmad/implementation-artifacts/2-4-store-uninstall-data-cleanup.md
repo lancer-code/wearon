@@ -61,6 +61,15 @@ so that **no orphaned data remains and privacy requirements are met**.
 - [Source: project-context.md#Security Rules] — HMAC verification
 - [Source: project-context.md#Critical Don't-Miss Rules] — Shopify webhook verification
 
+### Database Types
+
+- Use generated Supabase types from `packages/api/src/types/database.ts` for all database operations where applicable.
+- Regenerate types after any migration: `npx supabase gen types typescript --project-id ljilupbgmrizblkzokfa > packages/api/src/types/database.ts`
+
+### Workflow
+
+- **Commit code after story completion.** Each completed story should be committed as a standalone commit before moving to the next story.
+
 ## Dev Agent Record
 
 ### Agent Model Used

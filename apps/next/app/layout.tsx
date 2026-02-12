@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { NextTamaguiProvider } from 'app/provider/NextTamaguiProvider'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 export const metadata: Metadata = {
   title: 'Tamagui • App Router',
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body style={{ margin: 0, minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         <NextTamaguiProvider>{children}</NextTamaguiProvider>
+        <SpeedInsights />
       </body>
     </html>
   )

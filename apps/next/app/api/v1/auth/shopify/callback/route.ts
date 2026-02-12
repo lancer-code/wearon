@@ -155,13 +155,17 @@ export async function GET(request: Request) {
       const { error: keyError } = await supabase.from('store_api_keys').insert({
         store_id: storeId,
         key_hash: apiKey.hash,
-        label: 'Default API Key',
-        allowed_domains: [shopDomain],
+        allowed_domains: [`https://${shopDomain}`], // CORS origin format with scheme
         is_active: true,
       })
 
       if (keyError) {
         logger.error({ err: keyError.message, storeId }, '[Shopify OAuth] API key creation failed')
+        // CRITICAL: API key is required for store to function - fail the OAuth flow
+        return NextResponse.json(
+          { data: null, error: { code: 'INTERNAL_ERROR', message: 'API key creation failed' } },
+          { status: 500 },
+        )
       }
 
       // store_credits row auto-created by database trigger (Story 1.1)

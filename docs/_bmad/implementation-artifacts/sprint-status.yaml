@@ -85,11 +85,11 @@ development_status:
   epic-6-retrospective: optional
 
   # Epic 7: Analytics, Admin & Insights
-  epic-7: in-progress
+  epic-7: done
   7-1-store-level-analytics-api: done
   7-2-b2b-admin-analytics-dashboard: done
   7-3-revenue-quality-dashboard: done
-  7-4-churn-detection-b2c-admin-analytics: review
+  7-4-churn-detection-b2c-admin-analytics: done
   epic-7-retrospective: optional
 
   # Epic 8: Privacy, Compliance & Trust

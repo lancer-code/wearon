@@ -70,7 +70,7 @@ development_status:
 
   # Epic 5: Size Recommendation
   epic-5: in-progress
-  5-1-size-rec-proxy-api-endpoint: ready-for-dev
+  5-1-size-rec-proxy-api-endpoint: review
   5-2-body-profile-database-api: ready-for-dev
   5-3-size-rec-display-confidence: ready-for-dev
   5-4-mediapipe-pose-estimation-service: ready-for-dev

@@ -1,6 +1,6 @@
 # Story 5.1: Size Rec Proxy API Endpoint
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,24 +18,24 @@ so that **I can order the right size and avoid returns**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Implement POST /api/v1/size-rec (AC: #1, #3)
-  - [ ] 1.1 Create route at `apps/next/app/api/v1/size-rec/route.ts`.
-  - [ ] 1.2 Use `withB2BAuth` middleware (API key required to prevent abuse).
-  - [ ] 1.3 Validate input with Zod: `image_url` (string URL, required), `height_cm` (number, required, 100-250 range).
-  - [ ] 1.4 Proxy request to FastAPI worker endpoint `POST /estimate-body` using axios with 5s timeout.
-  - [ ] 1.5 Transform FastAPI response to B2B response format: `{ data: { recommended_size, measurements, confidence, body_type }, error: null }`.
-  - [ ] 1.6 No credit deduction — size rec is always free.
+- [x] Task 1: Implement POST /api/v1/size-rec (AC: #1, #3)
+  - [x] 1.1 Create route at `apps/next/app/api/v1/size-rec/route.ts`.
+  - [x] 1.2 Use `withB2BAuth` middleware (API key required to prevent abuse).
+  - [x] 1.3 Validate input with Zod: `image_url` (string URL, required), `height_cm` (number, required, 100-250 range).
+  - [x] 1.4 Proxy request to FastAPI worker endpoint `POST /estimate-body` using axios with 5s timeout.
+  - [x] 1.5 Transform FastAPI response to B2B response format: `{ data: { recommended_size, measurements, confidence, body_type }, error: null }`.
+  - [x] 1.6 No credit deduction — size rec is always free.
 
-- [ ] Task 2: Graceful degradation on worker failure (AC: #2)
-  - [ ] 2.1 Catch axios timeout (5s) and connection errors.
-  - [ ] 2.2 Return 503: `{ data: null, error: { code: "SERVICE_UNAVAILABLE", message: "Size recommendation temporarily unavailable" } }`.
-  - [ ] 2.3 Log error with `request_id` and worker URL (never log image URLs with signatures).
+- [x] Task 2: Graceful degradation on worker failure (AC: #2)
+  - [x] 2.1 Catch axios timeout (5s) and connection errors.
+  - [x] 2.2 Return 503: `{ data: null, error: { code: "SERVICE_UNAVAILABLE", message: "Size recommendation temporarily unavailable" } }`.
+  - [x] 2.3 Log error with `request_id` and worker URL (never log image URLs with signatures).
 
-- [ ] Task 3: Write tests (AC: #1-3)
-  - [ ] 3.1 Test valid request proxies to FastAPI and returns size recommendation.
-  - [ ] 3.2 Test worker timeout returns 503 without affecting other endpoints.
-  - [ ] 3.3 Test no credit deduction occurs for size rec requests.
-  - [ ] 3.4 Test input validation rejects invalid height_cm values.
+- [x] Task 3: Write tests (AC: #1-3)
+  - [x] 3.1 Test valid request proxies to FastAPI and returns size recommendation.
+  - [x] 3.2 Test worker timeout returns 503 without affecting other endpoints.
+  - [x] 3.3 Test no credit deduction occurs for size rec requests.
+  - [x] 3.4 Test input validation rejects invalid height_cm values.
 
 ## Dev Notes
 
@@ -78,10 +78,47 @@ so that **I can order the right size and avoid returns**.
 
 ### Agent Model Used
 
-(to be filled by dev agent)
+Codex (GPT-5)
 
 ### Debug Log References
 
+- Red phase: added `apps/next/__tests__/size-rec.route.test.ts` and confirmed initial failure from placeholder/incorrect route import path
+- Green phase: implemented full proxy endpoint with `withB2BAuth`, Zod validation, axios timeout, worker response normalization, and graceful 503 handling
+- Validation: `node ./node_modules/vitest/vitest.mjs run apps/next/__tests__/size-rec.route.test.ts` passed (`4/4`)
+- Regression: `yarn test` shows no new regressions from this story; remaining failures are existing infra/env-dependent tests (`packages/api/__tests__/migrations/b2b-schema.test.ts`, `apps/next/__tests__/build.test.ts`, `apps/next/__tests__/dev.test.ts`)
+- Lint/format: `yarn biome format --write ...` and `yarn biome check ...` passed for touched Story 5.1 files
+
+### Implementation Plan
+
+- Replace `/api/v1/size-rec` placeholder with production proxy behavior
+- Validate request contract with Zod before proxying
+- Proxy to worker `POST /estimate-body` with strict 5s timeout and request-id forwarding
+- Keep B2B envelope format and snake_case response fields
+- Return graceful 503 on worker timeout/unreachable states without touching credit flows
 ### Completion Notes List
 
+- Implemented `handleSizeRecPost` and exported `POST = withB2BAuth(handleSizeRecPost)` in `apps/next/app/api/v1/size-rec/route.ts`
+- Added strict Zod input validation:
+  - `image_url`: required valid URL
+  - `height_cm`: required number between 100 and 250
+- Added worker URL resolution from `WORKER_API_URL` and proxy call to `${WORKER_API_URL}/estimate-body` using axios with:
+  - timeout `5000`
+  - `X-Request-Id` header propagation
+- Added worker response validation and conversion to existing B2B response envelope via `successResponse(...)`
+- Added graceful degradation:
+  - timeout/connection/5xx worker failures map to `503 SERVICE_UNAVAILABLE` with message `"Size recommendation temporarily unavailable"`
+  - structured error logging includes worker URL and error metadata only (no image URL logging)
+- Confirmed no credit mutation path exists in this endpoint (size rec remains free)
+- Added Story-specific tests covering valid proxy, timeout handling, no-credit-deduction behavior, and height validation failures
 ### File List
+
+- `apps/next/app/api/v1/size-rec/route.ts` (modified)
+- `apps/next/__tests__/size-rec.route.test.ts` (created)
+
+### Change Log
+
+| Change | Reason |
+|--------|--------|
+| Replaced placeholder `/api/v1/size-rec` route with worker proxy implementation | Deliver AC #1 and AC #3 with production behavior |
+| Added explicit 5s timeout + graceful 503 mapping and sanitized logging | Deliver AC #2 and resilience requirement NFR32 |
+| Added route-level test suite for proxy/validation/free-size-rec guarantees | Prevent regressions and prove AC #1-#3 coverage |

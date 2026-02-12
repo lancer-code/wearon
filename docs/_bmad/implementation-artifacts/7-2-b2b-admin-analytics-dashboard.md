@@ -1,6 +1,6 @@
 # Story 7.2: B2B Admin Analytics Dashboard
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -16,35 +16,35 @@ so that **I can monitor platform health and identify at-risk stores**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: B2B analytics tRPC endpoints (AC: #1, #2)
-  - [ ] 1.1 Extend `packages/api/src/routers/analytics.ts` with B2B admin queries.
-  - [ ] 1.2 `getB2BOverview` (adminProcedure): total active stores, total B2B generations, total credits consumed, date-range filtering.
-  - [ ] 1.3 `getStoreBreakdown` (adminProcedure): per-store stats — generation count, credit balance, subscription tier, last generation date. Paginated.
-  - [ ] 1.4 `getStoreDetail` (adminProcedure): single store details — full credit history, generation history, config.
+- [x] Task 1: B2B analytics tRPC endpoints (AC: #1, #2)
+  - [x] 1.1 Extend `packages/api/src/routers/analytics.ts` with B2B admin queries.
+  - [x] 1.2 `getB2BOverview` (adminProcedure): total active stores, total B2B generations, total credits consumed, date-range filtering.
+  - [x] 1.3 `getStoreBreakdown` (adminProcedure): per-store stats — generation count, credit balance, subscription tier, last generation date. Paginated.
+  - [x] 1.4 `getStoreDetail` (adminProcedure): single store details — full credit history, generation history, config.
 
-- [ ] Task 2: B2B admin dashboard UI (AC: #1)
-  - [ ] 2.1 Create `packages/app/features/admin/admin-b2b-analytics.tsx` component.
-  - [ ] 2.2 Display B2B overview cards: total stores, total generations, total revenue, credit consumption.
-  - [ ] 2.3 Display store-by-store breakdown table with sorting and filtering.
-  - [ ] 2.4 Link each store row to store detail view.
+- [x] Task 2: B2B admin dashboard UI (AC: #1)
+  - [x] 2.1 Create `packages/app/features/admin/admin-b2b-analytics.tsx` component.
+  - [x] 2.2 Display B2B overview cards: total stores, total generations, total revenue, credit consumption.
+  - [x] 2.3 Display store-by-store breakdown table with sorting and filtering.
+  - [x] 2.4 Link each store row to store detail view.
 
-- [ ] Task 3: Store management UI (AC: #2)
-  - [ ] 3.1 Create `packages/app/features/admin/admin-store-detail.tsx` component.
-  - [ ] 3.2 Display store config, credit balance, subscription tier, API key status.
-  - [ ] 3.3 Display generation history table (paginated).
-  - [ ] 3.4 Display credit transaction history table (paginated).
+- [x] Task 3: Store management UI (AC: #2)
+  - [x] 3.1 Create `packages/app/features/admin/admin-store-detail.tsx` component.
+  - [x] 3.2 Display store config, credit balance, subscription tier, API key status.
+  - [x] 3.3 Display generation history table (paginated).
+  - [x] 3.4 Display credit transaction history table (paginated).
 
-- [ ] Task 4: Admin route pages (AC: #1-2)
-  - [ ] 4.1 Create `apps/next/app/admin/b2b-analytics/page.tsx` — B2B overview + store breakdown.
-  - [ ] 4.2 Create `apps/next/app/admin/stores/page.tsx` — store list with management.
-  - [ ] 4.3 Create `apps/next/app/admin/stores/[id]/page.tsx` — store detail view.
-  - [ ] 4.4 Add navigation links in admin sidebar (`admin-sidebar.tsx`).
+- [x] Task 4: Admin route pages (AC: #1-2)
+  - [x] 4.1 Create `apps/next/app/admin/b2b-analytics/page.tsx` — B2B overview + store breakdown.
+  - [x] 4.2 Create `apps/next/app/admin/stores/page.tsx` — store list with management.
+  - [x] 4.3 Create `apps/next/app/admin/stores/[id]/page.tsx` — store detail view.
+  - [x] 4.4 Add navigation links in admin sidebar (`admin-sidebar.tsx`).
 
-- [ ] Task 5: Write tests (AC: #1-2)
-  - [ ] 5.1 Test B2B overview returns correct aggregate stats.
-  - [ ] 5.2 Test store breakdown pagination works.
-  - [ ] 5.3 Test store detail returns complete store information.
-  - [ ] 5.4 Test admin-only access (non-admins rejected).
+- [x] Task 5: Write tests (AC: #1-2)
+  - [x] 5.1 Test B2B overview returns correct aggregate stats.
+  - [x] 5.2 Test store breakdown pagination works.
+  - [x] 5.3 Test store detail returns complete store information.
+  - [x] 5.4 Test admin-only access (non-admins rejected).
 
 ## Dev Notes
 
@@ -87,10 +87,36 @@ so that **I can monitor platform health and identify at-risk stores**.
 
 ### Agent Model Used
 
-(to be filled by dev agent)
+Claude Opus 4.6
 
 ### Debug Log References
 
+None — clean implementation, no debugging issues.
+
 ### Completion Notes List
 
+- Implemented 3 new adminProcedure tRPC endpoints: `getB2BOverview`, `getStoreBreakdown`, `getStoreDetail`
+- All endpoints use `adminSupabase` (service role) for B2B table access
+- `getB2BOverview` supports optional date-range filtering
+- `getStoreBreakdown` and `getStoreDetail` support paginated results
+- Created B2B analytics dashboard UI with overview cards and store breakdown table
+- Created store detail page with credit balance, generation history, and transaction history
+- Added `/admin/b2b-analytics` and `/admin/stores/[id]` routes
+- Added "B2B Analytics" and "Stores" links to admin sidebar (admin-only)
+- Sidebar now highlights active state for sub-paths (e.g., `/admin/stores/abc` highlights Stores)
+- 14 unit tests covering aggregate stats, pagination, store detail, and admin-only access
+- No regressions introduced (pre-existing test failures unrelated to this story)
+
 ### File List
+
+- packages/api/src/routers/analytics.ts (modified — added getB2BOverview, getStoreBreakdown, getStoreDetail)
+- packages/app/features/admin/admin-b2b-analytics.tsx (new)
+- packages/app/features/admin/admin-store-detail.tsx (new)
+- packages/app/features/admin/admin-sidebar.tsx (modified — added B2B Analytics and Stores nav items)
+- packages/app/features/admin/index.ts (modified — added exports)
+- apps/next/app/admin/b2b-analytics/page.tsx (new)
+- apps/next/app/admin/stores/page.tsx (new)
+- apps/next/app/admin/stores/[id]/page.tsx (new)
+- packages/api/__tests__/routers/b2b-analytics.test.ts (new)
+- docs/_bmad/implementation-artifacts/sprint-status.yaml (modified)
+- docs/_bmad/implementation-artifacts/7-2-b2b-admin-analytics-dashboard.md (modified)

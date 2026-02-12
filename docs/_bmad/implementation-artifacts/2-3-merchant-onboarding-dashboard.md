@@ -45,9 +45,17 @@ so that **I can get started quickly and manage my WearOn integration**.
 
 ### Review Follow-ups (AI)
 
-- [ ] [AI-Review][HIGH] Story File List cannot be verified against current git working tree (no uncommitted/staged evidence for listed files); validate against commit/PR history before marking done. [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:114]
-- [ ] [AI-Review][MEDIUM] Current workspace has undocumented changes outside this story (`packages/api/package.json`, `packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`, `supabase/migrations/008_paddle_billing_schema.sql`) and traceability is incomplete for this story review. [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:114]
-- [ ] [AI-Review][LOW] Dev Agent Record is missing immutable traceability for independent verification (commit SHA/PR link and exact test command output). [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:87]
+- [x] [AI-Review][HIGH] Story File List cannot be verified against current git working tree (no uncommitted/staged evidence for listed files); validate against commit/PR history before marking done. [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:114]
+- [x] [AI-Review][MEDIUM] Current workspace has undocumented changes outside this story (`packages/api/package.json`, `packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`, `supabase/migrations/008_paddle_billing_schema.sql`) and traceability is incomplete for this story review. [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:114]
+- [x] [AI-Review][LOW] Dev Agent Record is missing immutable traceability for independent verification (commit SHA/PR link and exact test command output). [docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md:87]
+- [ ] [AI-Review][HIGH] Merchant store lookup depends on `stores.owner_user_id`, but current schema artifacts do not define this column, so `getMyStore` can fail to resolve merchant context at runtime. [packages/api/src/routers/merchant.ts:48]
+- [ ] [AI-Review][HIGH] API key regeneration is not atomic: existing keys are deactivated before new key insert, and insert failure leaves the store with no active API key. [packages/api/src/routers/merchant.ts:298]
+- [ ] [AI-Review][MEDIUM] Masked API key preview is derived from `key_hash` prefix, not the real API key prefix, so dashboard display does not represent an actual partially masked key as specified in AC #3. [packages/api/src/routers/merchant.ts:263]
+- [ ] [AI-Review][MEDIUM] Onboarding step 1 does not include store name confirmation (only domain/status/billing mode), leaving AC #1 step details incomplete. [packages/app/features/merchant/merchant-onboarding.tsx:110]
+- [ ] [AI-Review][HIGH] Story tests are mostly static value checks and do not execute router procedures against mocked Supabase flows, so key AC behaviors (onboarding completion persistence, key regeneration side effects) remain unverified. [packages/api/__tests__/routers/merchant.test.ts:1]
+- [ ] [AI-Review][MEDIUM] Dashboard “Copy” action copies only the masked preview (`wk_xxxx...****`) rather than a usable key value, which is operationally misleading for merchants troubleshooting plugin auth. [packages/app/features/merchant/merchant-dashboard.tsx:29]
+- [ ] [AI-Review][MEDIUM] `getCreditBalance` ignores query errors and returns zeroed balances, masking data/infra failures as valid account state. [packages/api/src/routers/merchant.ts:285]
+- [ ] [AI-Review][MEDIUM] `getStoreForUser` maps all store lookup failures to `NOT_FOUND`, which hides backend/query failures and complicates incident diagnosis for merchant access issues. [packages/api/src/routers/merchant.ts:51]
 ## Dev Notes
 
 ### Architecture Requirements
@@ -94,6 +102,10 @@ Claude Opus 4.6
 - All 120 tests pass (14 new for this story)
 - 3 pre-existing failures unrelated to this story (b2b-schema.test.ts needs Supabase env vars, Next.js build/dev tests are infrastructure issues)
 - 0 regressions
+- Verification command (2026-02-12): `yarn vitest run packages/api/__tests__/routers/merchant.test.ts`
+- Command output (2026-02-12): 1 file passed, 14 tests passed, 0 failed
+- Traceability commit for story implementation files: `2332b87` (`feat: Implement Epic 1-2 infrastructure and Epic 2 store management`)
+- Current repository HEAD during remediation: `b871f7d9f9fa5933471b61681e2a08dfb29b865b`
 
 ### Completion Notes List
 
@@ -107,6 +119,9 @@ Claude Opus 4.6
 - Onboarding Step 3 displays full API key from OAuth redirect URL params (one-time display)
 - Dashboard includes: store overview cards, masked API key with show/hide/copy/regenerate, store configuration details
 - Route protection added to `proxy.ts` for `/merchant/*` — requires Supabase Auth
+- ✅ Resolved review finding [HIGH]: File List validated against git history and current file presence.
+- ✅ Resolved review finding [MEDIUM]: Documented unrelated active workspace changes outside Story 2.3 scope (`packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`).
+- ✅ Resolved review finding [LOW]: Added immutable traceability (commit SHA + exact test command/output).
 
 ### Change Log
 
@@ -115,6 +130,9 @@ Claude Opus 4.6
 | Used `/merchant/` URL path instead of `(merchant)` route group | Story 2.2 OAuth callback redirects to `/merchant/onboarding` — using route group would produce `/onboarding` URL, breaking the redirect |
 | Payment step shows placeholder | Story 3.2 implements Paddle billing on dedicated `/merchant/billing` page; onboarding keeps this step lightweight |
 | Added `getCreditBalance` and `completeOnboarding` endpoints | Required by dashboard and onboarding UI but not explicitly listed as separate tasks — natural extensions of Tasks 3 and 4 |
+| Resolved review follow-ups (3) and set story to review | Completed traceability verification and synchronized sprint/story status |
+| Re-review reopened story and added unresolved follow-ups (5) | Identified merchant linkage/schema dependency risk, API key regeneration safety gap, masked-key contract mismatch, onboarding data gap, and insufficient behavioral tests |
+| Re-review pass added unresolved follow-ups (3) | Identified masked-key copy UX defect, hidden credit-balance query failures, and over-broad NOT_FOUND mapping for merchant store lookup failures |
 
 ### File List
 
@@ -133,3 +151,5 @@ Claude Opus 4.6
 **Modified:**
 - `packages/api/src/routers/_app.ts` — Added merchant router
 - `apps/next/proxy.ts` — Added `/merchant/*` route protection + matcher
+- `docs/_bmad/implementation-artifacts/2-3-merchant-onboarding-dashboard.md` — Review follow-up resolution and status update
+- `docs/_bmad/implementation-artifacts/sprint-status.yaml` — Story status in sprint tracking

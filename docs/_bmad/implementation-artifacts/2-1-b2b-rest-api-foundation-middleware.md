@@ -1,6 +1,6 @@
 # Story 2.1: B2B REST API Foundation & Middleware
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -95,6 +95,17 @@ so that **Shopify plugins can safely communicate with the WearOn platform throug
   - [x] 9.4 Create `packages/api/__tests__/middleware/b2b.test.ts` — test: full middleware chain passes for valid request, OPTIONS handled before auth, each failure mode returns correct error format.
   - [x] 9.5 Create `packages/api/__tests__/utils/b2b-response.test.ts` — test: success response wraps data in `{ data, error: null }` with snake_case keys, error response uses correct HTTP status, rate limit response includes headers.
 
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Story File List cannot be verified against current git working tree (no uncommitted/staged evidence for listed files); validate against commit/PR history before marking done. [docs/_bmad/implementation-artifacts/2-1-b2b-rest-api-foundation-middleware.md:367]
+- [x] [AI-Review][MEDIUM] Current workspace has undocumented changes outside this story (`packages/api/package.json`, `packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`, `supabase/migrations/008_paddle_billing_schema.sql`) and traceability is incomplete for this story review. [docs/_bmad/implementation-artifacts/2-1-b2b-rest-api-foundation-middleware.md:367]
+- [x] [AI-Review][LOW] Dev Agent Record is missing immutable traceability for independent verification (commit SHA/PR link and exact test command output). [docs/_bmad/implementation-artifacts/2-1-b2b-rest-api-foundation-middleware.md:342]
+- [ ] [AI-Review][HIGH] CORS/domain restriction can be bypassed when `allowedDomains` is empty because `isOriginAllowed()` returns `true`, which permits any Origin instead of enforcing registered-domain checks. [packages/api/src/middleware/cors.ts:10]
+- [ ] [AI-Review][HIGH] OPTIONS preflight is processed with an empty domain list (`handlePreflight(request, [])`), which inherits the allow-all behavior and can over-permit cross-origin preflight responses before store/domain resolution. [packages/api/src/middleware/b2b.ts:19]
+- [ ] [AI-Review][MEDIUM] Request correlation ID can diverge between middleware and auth context because `extractRequestId()` is called independently in both layers; this breaks consistent request tracing in logs/responses. [packages/api/src/middleware/b2b.ts:14]
+- [ ] [AI-Review][MEDIUM] API response snake_case contract is violated for webhook cleanup payloads: route returns `cleanupStore()` result directly with camelCase keys (`storeId`, `apiKeysDeleted`, etc.) instead of normalized snake_case output. [apps/next/app/api/v1/webhooks/shopify/app/route.ts:77]
+- [ ] [AI-Review][MEDIUM] Tier configuration defines both per-minute and per-hour budgets, but implementation enforces only `maxRequestsPerMinute`, leaving hourly burst control (`maxRequestsPerHour`) unused. [packages/api/src/middleware/rate-limit.ts:49]
+- [ ] [AI-Review][MEDIUM] Middleware tests currently codify insecure behavior (`allows any origin when allowedDomains is empty`), which will mask CORS hardening regressions instead of catching them. [packages/api/__tests__/middleware/cors.test.ts:31]
 ## Dev Notes
 
 ### Architecture Requirements
@@ -343,6 +354,10 @@ Claude Opus 4.6
 
 - All 83 tests pass (37 new for this story + 46 from Story 1.2)
 - 3 pre-existing test failures unrelated to this story (b2b-schema.test.ts needs Supabase env vars, Next.js build/dev tests are infrastructure issues)
+- Verification command (2026-02-12): `yarn vitest run packages/api/__tests__/middleware/api-key-auth.test.ts packages/api/__tests__/middleware/cors.test.ts packages/api/__tests__/middleware/rate-limit.test.ts packages/api/__tests__/middleware/b2b.test.ts packages/api/__tests__/utils/b2b-response.test.ts`
+- Command output (2026-02-12): 5 files passed, 37 tests passed, 0 failed
+- Traceability commit for story implementation files: `2332b87` (`feat: Implement Epic 1-2 infrastructure and Epic 2 store management`)
+- Current repository HEAD during remediation: `b871f7d9f9fa5933471b61681e2a08dfb29b865b`
 
 ### Completion Notes List
 
@@ -355,6 +370,9 @@ Claude Opus 4.6
 - All placeholder routes return 501 with `NOT_IMPLEMENTED` error code
 - Webhook routes (`/api/v1/webhooks/shopify/*`) skip `withB2BAuth` (Shopify webhooks use HMAC, not API keys)
 - `NextResponse` used in `b2b-response.ts` but tests use standard `Response` (NextResponse extends Response; works in Vitest without Next.js runtime)
+- ✅ Resolved review finding [HIGH]: File List validated against git history and current file presence.
+- ✅ Resolved review finding [MEDIUM]: Documented unrelated active workspace changes outside Story 2.1 scope (`packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`).
+- ✅ Resolved review finding [LOW]: Added immutable traceability (commit SHA + exact test command/output).
 
 ### Change Log
 
@@ -363,6 +381,9 @@ Claude Opus 4.6
 | Added `NOT_IMPLEMENTED` to `B2BErrorCode` union | Needed for placeholder route 501 responses |
 | Webhook routes skip `withB2BAuth` | Shopify webhooks use HMAC verification, not API key auth — will be implemented in Story 6.3 |
 | `b2b-response.ts` uses `Response` instead of `NextResponse` | Standard `Response` API works in both Next.js runtime and Vitest test environment; `NextResponse.json()` is not available outside Next.js |
+| Resolved review follow-ups (3) and set story to review | Completed traceability verification and synchronized sprint/story status |
+| Re-review reopened story and added unresolved follow-ups (4) | Identified remaining CORS/preflight security gaps, request_id consistency issue, and snake_case response contract mismatch |
+| Re-review pass added unresolved follow-ups (2) | Identified missing per-hour rate-limit enforcement and test coverage that currently normalizes insecure empty-domain CORS behavior |
 
 ### File List
 
@@ -391,3 +412,5 @@ Claude Opus 4.6
 - `packages/api/src/types/index.ts` — Added B2B type exports
 - `packages/api/src/middleware/index.ts` — Added exports for api-key-auth, cors, rate-limit, b2b
 - `packages/api/src/index.ts` — Added B2B middleware, types, and response utility exports
+- `docs/_bmad/implementation-artifacts/2-1-b2b-rest-api-foundation-middleware.md` — Review follow-up resolution and status update
+- `docs/_bmad/implementation-artifacts/sprint-status.yaml` — Story status in sprint tracking

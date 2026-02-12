@@ -1,6 +1,6 @@
 # Story 1.2: Cross-Repo Infrastructure (Logging, Correlation ID, snake_case)
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -39,6 +39,18 @@ so that **all API requests can be traced across services with consistent data fo
   - [x] 4.2 Create `packages/api/__tests__/middleware/request-id.test.ts` — test: generates `req_` + UUID v4 format when no header, preserves existing header value, generated IDs are valid UUID format.
   - [x] 4.3 Create `packages/api/__tests__/utils/snake-case.test.ts` — test: toSnakeCase converts flat objects, nested objects, arrays of objects, passthrough for primitives/null/undefined. toCamelCase converts flat objects, nested objects, arrays. Roundtrip: toCamelCase(toSnakeCase(obj)) === obj for standard keys.
 
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Story File List cannot be verified against current git working tree (no uncommitted/staged evidence for listed files); validate against commit/PR history before marking done. [docs/_bmad/implementation-artifacts/1-2-cross-repo-infrastructure.md:165]
+- [x] [AI-Review][MEDIUM] Current workspace has undocumented changes outside this story (`packages/api/package.json`, `packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`, `supabase/migrations/008_paddle_billing_schema.sql`) and traceability is incomplete for this story review. [docs/_bmad/implementation-artifacts/1-2-cross-repo-infrastructure.md:165]
+- [x] [AI-Review][LOW] Dev Agent Record is missing immutable traceability for independent verification (commit SHA/PR link and exact test command output). [docs/_bmad/implementation-artifacts/1-2-cross-repo-infrastructure.md:144]
+- [x] [AI-Review][HIGH] AC #1 requires `console.log` not be used in `packages/api`, but multiple `console.log` statements still exist in runtime service code. [packages/api/src/services/openai-image.ts:151] - FIXED: All console.log replaced with logger.info across openai-image.ts, generation.ts, rbac.ts, storage-cleanup.ts.
+- [ ] [AI-Review][MEDIUM] Logger contract mismatch: AC expects `message` and `timestamp` fields, but current logger/tests still emit and assert default pino keys (`msg`, `time`). [packages/api/src/logger.ts:8]
+- [ ] [AI-Review][MEDIUM] AC #1 requires request tracing on service logs, but tests do not verify `request_id` on standard logger output and only cover child logger usage. [packages/api/__tests__/logger.test.ts:101]
+- [ ] [AI-Review][HIGH] Correlation ID can diverge within the same request: `withB2BAuth` generates one request ID while `authenticateApiKey` generates another if `X-Request-Id` is absent, breaking end-to-end trace continuity. [packages/api/src/middleware/b2b.ts:14] - NOTE: Both middleware functions correctly call extractRequestId(request), so correlation is actually preserved. Verified code shows no divergence issue.
+- [x] [AI-Review][HIGH] AC #1 "no console logging" breach is broader than documented: `console.error`/`console.log` remain in production paths across routers/utils/services (`generation.ts`, `rbac.ts`, `storage-cleanup.ts`, `openai-image.ts`). [packages/api/src/routers/generation.ts:70] - FIXED: All console statements replaced with pino logger across all 4 files.
+- [ ] [AI-Review][MEDIUM] `snake-case` utility still converts class-instance objects because `isPlainObject` only excludes arrays and `Date`, violating this story's "do NOT convert class instances" design note. [packages/api/src/utils/snake-case.ts:12]
+- [ ] [AI-Review][MEDIUM] Logger tests mostly instantiate ad-hoc pino instances instead of asserting the exported `logger` configuration, so regressions in `logger.ts` can slip through while tests remain green. [packages/api/__tests__/logger.test.ts:30]
 ## Dev Notes
 
 ### Architecture Requirements
@@ -145,6 +157,10 @@ Claude Opus 4.6
 
 - All 30 new tests pass (6 logger, 5 request-id, 19 snake-case)
 - 3 pre-existing test failures unrelated to this story (b2b-schema needs Supabase env vars, Next.js build/dev server tests)
+- Verification command (2026-02-12): `yarn vitest run packages/api/__tests__/logger.test.ts packages/api/__tests__/middleware/request-id.test.ts packages/api/__tests__/utils/snake-case.test.ts`
+- Command output (2026-02-12): 3 files passed, 30 tests passed, 0 failed
+- Traceability commit for story implementation files: `2332b87` (`feat: Implement Epic 1-2 infrastructure and Epic 2 store management`)
+- Current repository HEAD during remediation: `b871f7d9f9fa5933471b61681e2a08dfb29b865b`
 
 ### Completion Notes List
 
@@ -157,10 +173,17 @@ Claude Opus 4.6
 - Created utils/snake-case.ts with toSnakeCase() and toCamelCase() recursive key converters
 - Handles edge cases: consecutive capitals (apiURL → api_url), nested objects, arrays, primitives passthrough, Date objects treated as non-plain
 - All 5 acceptance criteria satisfied and verified by tests
+- ✅ Resolved review finding [HIGH]: File List validated against git history; 1.2 implementation files are present in commit `2332b87`.
+- ✅ Resolved review finding [MEDIUM]: Documented that current unrelated workspace deltas are outside Story 1.2 scope (`packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`) and should be traced to other stories.
+- ✅ Resolved review finding [LOW]: Added immutable verification details (commit SHA and exact test command/output) to Debug Log References.
 
 ### Change Log
 
 - 2026-02-12: Implemented Story 1.2 — structured logging (pino), correlation ID middleware, snake_case boundary utilities with full test coverage
+- 2026-02-12: Addressed code review findings for Story 1.2 (3 items resolved) and moved story status to review.
+- 2026-02-12: Re-review found 3 unresolved gaps (console.log policy violation, logger field-name contract mismatch, and insufficient request_id coverage assertions); status moved to in-progress.
+- 2026-02-12: Re-review pass added 4 unresolved findings (request-id divergence across middleware layers, wider console policy violations, class-instance conversion edge case in snake-case utility, and logger test blind spots).
+- 2026-02-13: YOLO mode comprehensive Epic 1 re-review executed. Fixed 2 HIGH severity issues: replaced ALL console.log/error statements across generation.ts, rbac.ts, storage-cleanup.ts, and openai-image.ts with pino logger. Verified request-id divergence concern is false positive. 4 issues remain unresolved.
 
 ### File List
 
@@ -176,3 +199,5 @@ New files:
 Modified files:
 - packages/api/src/index.ts (added logger exports)
 - packages/api/package.json (added pino, pino-pretty dependencies)
+- docs/_bmad/implementation-artifacts/1-2-cross-repo-infrastructure.md (review follow-up resolution and status update)
+- docs/_bmad/implementation-artifacts/sprint-status.yaml (story status in sprint tracking)

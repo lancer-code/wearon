@@ -1,6 +1,6 @@
 # Story 2.2: Shopify OAuth & Store Registration
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -44,6 +44,19 @@ so that **my store is registered on the WearOn platform and I can start configur
   - [x]5.2 Create `packages/api/__tests__/utils/encryption.test.ts` — test encrypt/decrypt roundtrip, different inputs produce different ciphertext.
   - [x]5.3 Create `packages/api/__tests__/auth/shopify-oauth.test.ts` — test OAuth callback creates store + API key + credits.
 
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Story File List cannot be verified against current git working tree (no uncommitted/staged evidence for listed files); validate against commit/PR history before marking done. [docs/_bmad/implementation-artifacts/2-2-shopify-oauth-store-registration.md:123]
+- [x] [AI-Review][MEDIUM] Current workspace has undocumented changes outside this story (`packages/api/package.json`, `packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`, `supabase/migrations/008_paddle_billing_schema.sql`) and traceability is incomplete for this story review. [docs/_bmad/implementation-artifacts/2-2-shopify-oauth-store-registration.md:123]
+- [x] [AI-Review][LOW] Dev Agent Record is missing immutable traceability for independent verification (commit SHA/PR link and exact test command output). [docs/_bmad/implementation-artifacts/2-2-shopify-oauth-store-registration.md:103]
+- [ ] [AI-Review][HIGH] New-store OAuth flow can complete without creating `store_api_keys`: API key insert errors are only logged and the request still redirects as success, violating AC #1 creation guarantees. [apps/next/app/api/v1/auth/shopify/callback/route.ts:155]
+- [ ] [AI-Review][HIGH] Supabase auth linkage persistence is not verified and can silently fail: store update to `owner_user_id` ignores DB errors; schema/type artifacts also do not show `owner_user_id` on `stores`, so linkage can be non-functional at runtime. [apps/next/app/api/v1/auth/shopify/callback/route.ts:53]
+- [ ] [AI-Review][MEDIUM] `allowed_domains` is seeded with bare `shopDomain` (no scheme), but CORS checks compare exact `Origin` values (typically `https://...`), causing valid browser origins to be rejected by default. [apps/next/app/api/v1/auth/shopify/callback/route.ts:159]
+- [ ] [AI-Review][MEDIUM] OAuth tests do not exercise callback route behavior (no mocked Supabase/OAuth interaction assertions), so critical AC paths like store/api-key creation and linkage are unverified despite "pass" status. [packages/api/__tests__/auth/shopify-oauth.test.ts:1]
+- [ ] [AI-Review][CRITICAL] API key insert payload includes `label`, but current `store_api_keys` schema/types do not define that column; key creation therefore fails against migration-backed DB and leaves installs without usable API credentials. [apps/next/app/api/v1/auth/shopify/callback/route.ts:158]
+- [ ] [AI-Review][HIGH] Plaintext API key is appended to redirect query params (`?api_key=...`), exposing credentials via browser history, referrers, logs, and analytics tooling. [apps/next/app/api/v1/auth/shopify/callback/route.ts:178]
+- [ ] [AI-Review][HIGH] Re-installation path only reactivates existing keys and never backfills a missing key record, so stores affected by initial key-creation failure remain permanently unprovisioned. [apps/next/app/api/v1/auth/shopify/callback/route.ts:120]
+- [ ] [AI-Review][MEDIUM] Auth linkage uses `listUsers()` + in-memory email scan without pagination/query filtering, which can miss existing users at scale and create duplicate owner accounts. [apps/next/app/api/v1/auth/shopify/callback/route.ts:27]
 ## Dev Notes
 
 ### Architecture Requirements
@@ -104,6 +117,10 @@ Claude Opus 4.6
 
 - All 15 new tests pass (3 shopify service, 6 encryption, 6 oauth)
 - 98/100 total tests pass; 3 pre-existing failures (b2b-schema env vars, Next.js build/dev tests)
+- Verification command (2026-02-12): `yarn vitest run packages/api/__tests__/services/shopify.test.ts packages/api/__tests__/utils/encryption.test.ts packages/api/__tests__/auth/shopify-oauth.test.ts`
+- Command output (2026-02-12): 3 files passed, 15 tests passed, 0 failed
+- Traceability commit for story implementation files: `2332b87` (`feat: Implement Epic 1-2 infrastructure and Epic 2 store management`)
+- Current repository HEAD during remediation: `b871f7d9f9fa5933471b61681e2a08dfb29b865b`
 
 ### Completion Notes List
 
@@ -115,10 +132,16 @@ Claude Opus 4.6
 - Re-installation handled in same callback — updates access token, re-activates API keys, no duplicate stores
 - Supabase Auth linkage: fetches shop owner email via Shopify Admin API, creates or links Supabase Auth user, stores `owner_user_id` on store record
 - All 3 acceptance criteria satisfied
+- ✅ Resolved review finding [HIGH]: File List validated against git history and current file presence.
+- ✅ Resolved review finding [MEDIUM]: Documented unrelated active workspace changes outside Story 2.2 scope (`packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`).
+- ✅ Resolved review finding [LOW]: Added immutable traceability (commit SHA + exact test command/output).
 
 ### Change Log
 
 - 2026-02-12: Implemented Story 2.2 — Shopify OAuth, store registration, API key generation, encryption utility, Supabase Auth linkage
+- 2026-02-12: Addressed code review findings for Story 2.2 (3 items resolved) and moved story status to review.
+- 2026-02-12: Re-review reopened story and added unresolved follow-ups (4) for API key creation guarantees, auth linkage persistence, allowed_domains format, and test coverage gaps.
+- 2026-02-12: Re-review pass added 4 unresolved findings (schema mismatch on API-key insert, plaintext key leakage via redirect query string, missing key backfill on reinstall, and non-scalable user-link lookup).
 
 ### File List
 
@@ -133,3 +156,5 @@ New files:
 
 Modified files:
 - packages/api/package.json (added @shopify/shopify-api dependency)
+- docs/_bmad/implementation-artifacts/2-2-shopify-oauth-store-registration.md (review follow-up resolution and status update)
+- docs/_bmad/implementation-artifacts/sprint-status.yaml (story status in sprint tracking)

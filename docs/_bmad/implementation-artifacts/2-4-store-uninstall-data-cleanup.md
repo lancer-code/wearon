@@ -1,6 +1,6 @@
 # Story 2.4: Store Uninstall & Data Cleanup
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -34,6 +34,18 @@ so that **no orphaned data remains and privacy requirements are met**.
   - [x] 3.2 Test cleanup marks store inactive, deletes API keys, cancels queued jobs.
   - [x] 3.3 Test cleanup completes within timing budget (all tests complete in <100ms).
 
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Story File List cannot be verified against current git working tree (no uncommitted/staged evidence for listed files); validate against commit/PR history before marking done. [docs/_bmad/implementation-artifacts/2-4-store-uninstall-data-cleanup.md:98]
+- [x] [AI-Review][MEDIUM] Current workspace has undocumented changes outside this story (`packages/api/package.json`, `packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`, `supabase/migrations/008_paddle_billing_schema.sql`) and traceability is incomplete for this story review. [docs/_bmad/implementation-artifacts/2-4-store-uninstall-data-cleanup.md:98]
+- [x] [AI-Review][LOW] Dev Agent Record is missing immutable traceability for independent verification (commit SHA/PR link and exact test command output). [docs/_bmad/implementation-artifacts/2-4-store-uninstall-data-cleanup.md:79]
+- [ ] [AI-Review][HIGH] HMAC verification can throw on malformed `X-Shopify-Hmac-Sha256` input because `timingSafeEqual` is called without buffer-length guards; this can produce 500s instead of clean signature rejection. [packages/api/src/utils/shopify-hmac.ts:15]
+- [ ] [AI-Review][HIGH] Cleanup service does not check database operation errors for key deletion, store deactivation, or queued-job cancellation; webhook can report success while required cleanup steps silently fail. [packages/api/src/services/store-cleanup.ts:49]
+- [ ] [AI-Review][MEDIUM] Cleanup flow is not transactional, so partial completion is possible (e.g., keys deleted but store status not updated), leaving inconsistent uninstall state against AC #1 guarantees. [packages/api/src/services/store-cleanup.ts:48]
+- [ ] [AI-Review][MEDIUM] Test suite does not verify NFR34 timing budget nor end-to-end webhook route behavior; current tests cover utility/service fragments only, leaving AC/NFR regression risk. [packages/api/__tests__/services/store-cleanup.test.ts:1]
+- [ ] [AI-Review][HIGH] Idempotency shortcut returns immediately when store is already `inactive`, so webhook retries cannot remediate partial cleanup failures (keys/jobs/storage) from prior attempts. [packages/api/src/services/store-cleanup.ts:42]
+- [ ] [AI-Review][MEDIUM] Storage cleanup targets only the `uploads` bucket path and does not cover generated outputs, leaving residual store data outside AC #2 cleanup intent. [packages/api/src/services/store-cleanup.ts:80]
+- [ ] [AI-Review][MEDIUM] File deletion is shallow and unpaged (`list(stores/{storeId})` once), which misses nested directories/large file sets and risks orphaned storage objects after uninstall. [packages/api/src/services/store-cleanup.ts:81]
 ## Dev Notes
 
 ### Architecture Requirements
@@ -80,6 +92,10 @@ Claude Opus 4.6
 
 - All 8 new tests pass (4 HMAC verification, 4 store cleanup)
 - 120/122 total tests pass; 3 pre-existing failures (b2b-schema env vars, Next.js build/dev tests)
+- Verification command (2026-02-12): `yarn vitest run packages/api/__tests__/utils/shopify-hmac.test.ts packages/api/__tests__/services/store-cleanup.test.ts`
+- Command output (2026-02-12): 2 files passed, 8 tests passed, 0 failed
+- Traceability commit for story implementation files: `2332b87` (`feat: Implement Epic 1-2 infrastructure and Epic 2 store management`)
+- Current repository HEAD during remediation: `b871f7d9f9fa5933471b61681e2a08dfb29b865b`
 
 ### Completion Notes List
 
@@ -90,10 +106,16 @@ Claude Opus 4.6
 - All cleanup actions logged with `request_id` via pino `createChildLogger`
 - Idempotent design: safe for Shopify's 19-retry webhook behavior
 - Both acceptance criteria satisfied
+- ✅ Resolved review finding [HIGH]: File List validated against git history and current file presence.
+- ✅ Resolved review finding [MEDIUM]: Documented unrelated active workspace changes outside Story 2.4 scope (`packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`).
+- ✅ Resolved review finding [LOW]: Added immutable traceability (commit SHA + exact test command/output).
 
 ### Change Log
 
 - 2026-02-12: Implemented Story 2.4 — Store uninstall webhook, HMAC verification, store cleanup service
+- 2026-02-12: Addressed code review findings for Story 2.4 (3 items resolved) and moved story status to review.
+- 2026-02-12: Re-review reopened story and added unresolved follow-ups (4) for malformed-HMAC handling, cleanup error handling/atomicity, and missing timing/route coverage.
+- 2026-02-12: Re-review pass added 3 unresolved findings (inactive-store early-return recovery gap, incomplete storage scope, and shallow/unpaged storage deletion coverage).
 
 ### File List
 
@@ -105,3 +127,5 @@ New files:
 
 Modified files:
 - apps/next/app/api/v1/webhooks/shopify/app/route.ts (replaced placeholder with functional handler)
+- docs/_bmad/implementation-artifacts/2-4-store-uninstall-data-cleanup.md (review follow-up resolution and status update)
+- docs/_bmad/implementation-artifacts/sprint-status.yaml (story status in sprint tracking)

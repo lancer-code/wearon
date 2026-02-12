@@ -1,6 +1,6 @@
 # Story 7.1: Store-Level Analytics API
 
-Status: review
+Status: done
 
 ## Story
 
@@ -41,6 +41,11 @@ so that **I can track ROI and optimize my try-on investment**.
   - [x] 4.2 Test date-range filtering works correctly.
   - [x] 4.3 Test analytics events are logged on generation completion/failure.
   - [x] 4.4 Test store scoping — no cross-tenant analytics access.
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][MEDIUM] Query params `start_date` and `end_date` accept any string value without ISO 8601 validation, allowing invalid dates (e.g., "not-a-date") to be passed directly to database `gte()`/`lte()` operations, potentially causing Postgres errors or unexpected query behavior. [apps/next/app/api/v1/stores/analytics/route.ts:31-44] **FIXED 2026-02-13**: Added `isValidISO8601()` validation function that checks date validity and format. Both date params are now validated before database queries, returning 400 with `VALIDATION_ERROR` for invalid dates. Added 2 new tests to verify rejection of invalid date formats.
+- [x] [AI-Review][LOW] Unnecessary `as number` type casts bypass TypeScript's null safety when accessing credit balance and total_spent fields, reducing type safety without providing value since nullish coalescing already handles undefined. [apps/next/app/api/v1/stores/analytics/route.ts:82-83] **FIXED 2026-02-13**: Removed `as number` casts, using direct nullish coalescing `credits?.balance ?? 0` for better type safety.
 
 ## Dev Notes
 
@@ -114,3 +119,4 @@ Claude Opus 4.6
 ## Change Log
 
 - 2026-02-12: Implemented Tasks 1, 2, 4 (API endpoint, analytics service, tests). Task 3 blocked on wearon-shopify repo availability.
+- 2026-02-13: Code review found 2 issues: (1) missing ISO 8601 date validation allowing invalid dates to reach database queries, (2) unnecessary type casts reducing type safety. Added date validation with 2 new tests, removed type casts. All 7 tests passing. Story marked done.

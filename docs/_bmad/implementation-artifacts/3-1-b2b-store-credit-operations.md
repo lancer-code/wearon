@@ -1,6 +1,6 @@
 # Story 3.1: B2B Store Credit Operations
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -40,6 +40,17 @@ so that **store credit balances are always accurate and generation costs are tra
   - [x] 3.4 Test 0 balance returns 402.
   - [x] 3.5 Verify B2C credit endpoints remain unchanged.
 
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Story File List cannot be verified against current git working tree (no uncommitted/staged evidence for listed files); validate against commit/PR history before marking done. [docs/_bmad/implementation-artifacts/3-1-b2b-store-credit-operations.md:107]
+- [x] [AI-Review][MEDIUM] Current workspace has undocumented changes outside this story (`packages/api/package.json`, `packages/api/src/services/b2b-credits.ts`, `packages/api/src/services/paddle.ts`, `supabase/migrations/008_paddle_billing_schema.sql`) and traceability is incomplete for this story review. [docs/_bmad/implementation-artifacts/3-1-b2b-store-credit-operations.md:107]
+- [x] [AI-Review][LOW] Dev Agent Record is missing immutable traceability for independent verification (commit SHA/PR link and exact test command output). [docs/_bmad/implementation-artifacts/3-1-b2b-store-credit-operations.md:81]
+- [x] [AI-Review][MEDIUM] `getStoreBalance` falls back to zero values on query failure, which can hide production data/read errors from callers. [packages/api/src/services/b2b-credits.ts:85]
+- [ ] [AI-Review][MEDIUM] AC #4 behavior is no longer deterministic for zero-credit generation requests: active subscribed stores now branch to overage billing instead of always returning `402 INSUFFICIENT_CREDITS`. [apps/next/app/api/v1/generation/create/route.ts:95]
+- [ ] [AI-Review][HIGH] Story tests are largely non-behavioral simulations and do not execute endpoint/procedure flows that prove AC outcomes (402 mapping, snake_case response payloads, or generation integration paths). [packages/api/__tests__/services/b2b-generation.test.ts:300]
+- [ ] [AI-Review][MEDIUM] AC #1/#2 require request_id transaction logging guarantees, but tests only assert RPC invocation arguments and do not validate persisted transaction records or end-to-end side effects. [packages/api/__tests__/services/b2b-credits.test.ts:53]
+- [ ] [AI-Review][MEDIUM] There is no direct route-level test coverage for `/api/v1/credits/balance`, leaving middleware+response integration (auth scoping, headers, snake_case payload shape) unverified in this story. [apps/next/__tests__/stores-config.route.test.ts:1]
+- [ ] [AI-Review][LOW] Balance endpoint swallows all thrown errors without logging context, reducing observability for credit-read failures tied to a specific store/request. [apps/next/app/api/v1/credits/balance/route.ts:14]
 ## Dev Notes
 
 ### Architecture Requirements
@@ -83,6 +94,10 @@ Claude Opus 4.6
 - All 141 tests pass (16 new for this story)
 - 3 pre-existing failures unrelated to this story (b2b-schema.test.ts needs Supabase env vars, Next.js build/dev tests are infrastructure issues)
 - 0 regressions
+- Verification command (2026-02-12): `yarn vitest run packages/api/__tests__/services/b2b-credits.test.ts packages/api/__tests__/services/b2b-generation.test.ts`
+- Command output (2026-02-12): 2 files passed, 33 tests passed, 0 failed
+- Traceability commit for story implementation files: `36c2628` (`feat: Implement Stories 3.1, 4.1 and remove Stripe (3.2 on-hold)`)
+- Current repository HEAD during remediation: `b871f7d9f9fa5933471b61681e2a08dfb29b865b`
 
 ### Completion Notes List
 
@@ -96,6 +111,11 @@ Claude Opus 4.6
 - Returns zero values (not error) when store_credits record not found
 - Tests mock `@supabase/supabase-js` createClient and set env vars before module import to support singleton pattern
 - B2C credit operations verified unchanged (separate table `user_credits`, separate RPC `deduct_credits`, separate fields `total_earned`)
+- Updated `getStoreBalance` behavior to throw explicit query errors instead of returning zero fallback values, preventing silent production data/read failures.
+- ✅ Resolved review finding [HIGH]: File List validated against git history and current file presence.
+- ✅ Resolved review finding [MEDIUM]: Documented unrelated active workspace changes outside Story 3.1 scope (`packages/api/src/services/paddle.ts`).
+- ✅ Resolved review finding [LOW]: Added immutable traceability (commit SHA + exact test command/output).
+- ✅ Resolved review finding [MEDIUM]: `getStoreBalance` fallback behavior corrected and covered by passing tests.
 
 ### Change Log
 
@@ -103,6 +123,9 @@ Claude Opus 4.6
 |--------|--------|
 | Response uses `successResponse()` directly instead of explicit `toSnakeCase()` wrapper | `successResponse` already returns proper JSON format; keys from `getStoreBalance` are camelCase but the response fields (`balance`, `total_purchased`, `total_spent`) match the snake_case convention naturally |
 | Tests set `process.env` before dynamic import | Singleton `getServiceClient()` checks env vars before calling `createClient`; mock only replaces `createClient` but doesn't bypass the env var check |
+| `getStoreBalance` now throws on query failure | Prevents masking operational/data errors with silent zeroed balances |
+| Re-review reopened story and added unresolved follow-ups (3) | Detected AC #4 behavior drift and insufficient behavioral test evidence for core credit-operation guarantees |
+| Re-review pass added unresolved follow-ups (2) | Identified missing route-level coverage for `/credits/balance` and absent error logging context in the balance handler |
 
 ### File List
 
@@ -112,3 +135,5 @@ Claude Opus 4.6
 
 **Modified:**
 - `apps/next/app/api/v1/credits/balance/route.ts` — Replaced placeholder with functional GET handler
+- `docs/_bmad/implementation-artifacts/3-1-b2b-store-credit-operations.md` — Review follow-up resolution and status update
+- `docs/_bmad/implementation-artifacts/sprint-status.yaml` — Story status in sprint tracking

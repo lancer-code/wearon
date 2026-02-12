@@ -33,7 +33,7 @@ export async function checkPermission(
   })
 
   if (error) {
-    logger.error('Error checking permission:', error)
+    logger.error({ err: error }, 'Error checking permission')
     return false
   }
 
@@ -54,7 +54,7 @@ export async function checkRole(
   })
 
   if (error) {
-    logger.error('Error checking role:', error)
+    logger.error({ err: error }, 'Error checking role')
     return false
   }
 
@@ -73,7 +73,7 @@ export async function getUserPermissions(
   })
 
   if (error) {
-    logger.error('Error getting user permissions:', error)
+    logger.error({ err: error }, 'Error getting user permissions')
     return []
   }
 
@@ -92,7 +92,7 @@ export async function getUserRoles(
   })
 
   if (error) {
-    logger.error('Error getting user roles:', error)
+    logger.error({ err: error }, 'Error getting user roles')
     return []
   }
 
@@ -116,7 +116,7 @@ export async function assignRole(
     .single()
 
   if (roleError || !role) {
-    logger.error('Error finding role:', roleError)
+    logger.error({ err: roleError }, 'Error finding role')
     return false
   }
 
@@ -128,7 +128,7 @@ export async function assignRole(
   })
 
   if (error) {
-    logger.error('Error assigning role:', error)
+    logger.error({ err: error }, 'Error assigning role')
     return false
   }
 
@@ -151,7 +151,7 @@ export async function removeRole(
     .single()
 
   if (roleError || !role) {
-    logger.error('Error finding role:', roleError)
+    logger.error({ err: roleError }, 'Error finding role')
     return false
   }
 
@@ -163,7 +163,7 @@ export async function removeRole(
     .eq('role_id', role.id)
 
   if (error) {
-    logger.error('Error removing role:', error)
+    logger.error({ err: error }, 'Error removing role')
     return false
   }
 

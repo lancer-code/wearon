@@ -136,7 +136,7 @@ export async function cleanupOldSessions(): Promise<number> {
     .select('id')
 
   if (error) {
-    logger.error('Error cleaning up old sessions:', error)
+    logger.error({ err: error }, 'Error cleaning up old sessions')
     return 0
   }
 
@@ -183,7 +183,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
       return result
     }
 
-    logger.log(`[StuckJobRecovery] Found ${stuckSessions.length} stuck sessions`)
+    logger.info(`[StuckJobRecovery] Found ${stuckSessions.length} stuck sessions`)
 
     // Process each stuck session
     for (const session of stuckSessions) {
@@ -235,7 +235,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
       }
     }
 
-    logger.log(`[StuckJobRecovery] Recovered ${result.recoveredCount} sessions, refunded ${result.refundedCount} credits`)
+    logger.info(`[StuckJobRecovery] Recovered ${result.recoveredCount} sessions, refunded ${result.refundedCount} credits`)
     return result
   } catch (error) {
     result.errors.push({

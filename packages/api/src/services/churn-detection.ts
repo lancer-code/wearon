@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { type SupabaseClient, createClient } from '@supabase/supabase-js'
 import { logger } from '../logger'
 
 const CHURN_THRESHOLD = 0.5 // 50% week-over-week decrease
@@ -23,7 +23,8 @@ export interface ChurnDetectionResult {
  */
 export async function detectChurnRisk(
   storeId: string,
-  supabase?: ReturnType<typeof createClient>,
+  // biome-ignore lint: SupabaseClient generic variance
+  supabase?: SupabaseClient<any>,
 ): Promise<ChurnDetectionResult> {
   const db = supabase || getAdminSupabase()
   const now = new Date()

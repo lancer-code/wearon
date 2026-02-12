@@ -152,7 +152,7 @@ export const bodyProfileRouter = router({
       return null
     }
 
-    return mapBodyProfile(data as Record<string, unknown>)
+    return mapBodyProfile(data as unknown as Record<string, unknown>)
   }),
 
   getSizeRecInput: protectedProcedure.query(async ({ ctx }) => {
@@ -199,7 +199,7 @@ export const bodyProfileRouter = router({
       }
     }
 
-    const profileData = data as Record<string, unknown>
+    const profileData = data as unknown as Record<string, unknown>
     if (!hasEstimatedMeasurements(profileData)) {
       return {
         useSavedProfile: false,
@@ -263,7 +263,7 @@ export const bodyProfileRouter = router({
       })
     }
 
-    return mapBodyProfile(data as Record<string, unknown>)
+    return mapBodyProfile(data as unknown as Record<string, unknown>)
   }),
 
   updateFromSizeRec: protectedProcedure
@@ -313,6 +313,6 @@ export const bodyProfileRouter = router({
         })
       }
 
-      return mapBodyProfile(data as Record<string, unknown>)
+      return mapBodyProfile(data as unknown as Record<string, unknown>)
     }),
 })

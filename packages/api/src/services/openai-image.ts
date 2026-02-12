@@ -150,9 +150,9 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
   const apiKey = getApiKey()
 
   logger.info('[OpenAI Image] Starting generation...')
-  logger.info('[OpenAI Image] Model image:', modelImageUrl.substring(0, 50) + '...')
-  logger.info('[OpenAI Image] Outfit image:', outfitImageUrl ? outfitImageUrl.substring(0, 50) + '...' : 'none')
-  logger.info('[OpenAI Image] Accessories:', accessoryUrls.length)
+  logger.info(`[OpenAI Image] Model image: ${modelImageUrl.substring(0, 50)}...`)
+  logger.info(`[OpenAI Image] Outfit image: ${outfitImageUrl ? outfitImageUrl.substring(0, 50) + '...' : 'none'}`)
+  logger.info(`[OpenAI Image] Accessories: ${accessoryUrls.length}`)
 
   // Download and resize all images for cost optimization
   logger.info('[OpenAI Image] Downloading and resizing images...')
@@ -174,7 +174,7 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
     imageBuffers.push({ name: `accessory_${i}.jpg`, buffer: accBuffer })
   }
 
-  logger.info('[OpenAI Image] Downloaded and resized', imageBuffers.length, 'images')
+  logger.info(`[OpenAI Image] Downloaded and resized ${imageBuffers.length} images`)
 
   // Calculate total estimated cost (input tokens at $8/1M)
   // Note: After resizing to max 1024px, each image is ~765 tokens (2x2 tiles)
@@ -189,7 +189,7 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
   // Build the prompt for virtual try-on
   const tryOnPrompt = prompt || buildDefaultPrompt(!!outfitImageUrl, accessoryUrls.length)
 
-  logger.info('[OpenAI Image] Prompt:', tryOnPrompt.substring(0, 100) + '...')
+  logger.info(`[OpenAI Image] Prompt: ${tryOnPrompt.substring(0, 100)}...`)
 
   // Create form data with multiple images
   const formData = new FormData()
@@ -230,7 +230,7 @@ export async function generateWithOpenAI(options: OpenAIImageOptions): Promise<O
         throw new OpenAIImageError('No image data in response', response.status, response.data)
       }
 
-      logger.info('[OpenAI Image] Success!', imageUrl ? 'Got URL' : 'Got base64')
+      logger.info(`[OpenAI Image] Success! ${imageUrl ? 'Got URL' : 'Got base64'}`)
       return {
         imageUrl,
         imageBase64,

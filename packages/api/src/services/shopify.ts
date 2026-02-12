@@ -72,7 +72,7 @@ export async function completeAuth(request: Request) {
   return shopify.auth.callback({ rawRequest: request })
 }
 
-export function validateHmac(query: Record<string, string>): boolean {
+export async function validateHmac(query: Record<string, string>): Promise<boolean> {
   const shopify = getShopifyApi()
   return shopify.utils.validateHmac(query)
 }

@@ -1,6 +1,6 @@
 # Story 5.2: Body Profile Database & API
 
-Status: in-progress
+Status: done
 
 ## Story
 

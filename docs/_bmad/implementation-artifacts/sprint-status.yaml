@@ -62,9 +62,9 @@ development_status:
 
   # Epic 4: Shopify Plugin Storefront & Virtual Try-On
   epic-4: in-progress
-  4-1-b2b-generation-rest-api-endpoints: in-progress
-  4-2-plugin-theme-app-extension-core: in-progress
-  4-3-try-on-experience-privacy: in-progress
+  4-1-b2b-generation-rest-api-endpoints: review
+  4-2-plugin-theme-app-extension-core: review
+  4-3-try-on-experience-privacy: review
   4-4-plugin-accessibility: in-progress
   epic-4-retrospective: optional
 
@@ -78,8 +78,8 @@ development_status:
 
   # Epic 6: Resell Mode & Shopper Credits
   epic-6: in-progress
-  6-1-billing-mode-configuration: ready-for-dev
-  6-2-hidden-shopify-product-creation: ready-for-dev
+  6-1-billing-mode-configuration: in-progress
+  6-2-hidden-shopify-product-creation: review
   6-3-shopify-order-webhook-processing: ready-for-dev
   6-4-shopper-credit-balance-plugin-flow: ready-for-dev
   epic-6-retrospective: optional

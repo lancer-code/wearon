@@ -520,6 +520,8 @@ export type Database = {
           onboarding_completed: boolean
           retail_credit_price: number | null
           shop_domain: string
+          shopify_product_id: string | null
+          shopify_variant_id: string | null
           status: string
           subscription_id: string | null
           subscription_tier: string | null
@@ -533,6 +535,8 @@ export type Database = {
           onboarding_completed?: boolean
           retail_credit_price?: number | null
           shop_domain: string
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
           status?: string
           subscription_id?: string | null
           subscription_tier?: string | null
@@ -546,6 +550,8 @@ export type Database = {
           onboarding_completed?: boolean
           retail_credit_price?: number | null
           shop_domain?: string
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
           status?: string
           subscription_id?: string | null
           subscription_tier?: string | null

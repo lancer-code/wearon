@@ -1,6 +1,6 @@
 # Story 6.2: Hidden Shopify Product Creation
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,27 +18,27 @@ so that **shoppers can purchase credits through my store's existing checkout**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Auto-create hidden Shopify product (AC: #1)
-  - [ ] 1.1 In wearon platform, create service function to create Shopify product via Admin API using `@shopify/shopify-api`.
-  - [ ] 1.2 Product details: title "Try-On Credit", type "digital", hidden from Online Store sales channel.
-  - [ ] 1.3 Create variant with price matching `stores.retail_credit_price`.
-  - [ ] 1.4 Store `shopify_product_id` and `shopify_variant_id` in `stores` table.
-  - [ ] 1.5 Trigger product creation when billing mode switches to `resell_mode` (from Story 6.1 config endpoint).
+- [x] Task 1: Auto-create hidden Shopify product (AC: #1)
+  - [x] 1.1 In wearon platform, create service function to create Shopify product via Admin API using `@shopify/shopify-api`.
+  - [x] 1.2 Product details: title "Try-On Credit", type "digital", hidden from Online Store sales channel.
+  - [x] 1.3 Create variant with price matching `stores.retail_credit_price`.
+  - [x] 1.4 Store `shopify_product_id` and `shopify_variant_id` in `stores` table.
+  - [x] 1.5 Trigger product creation when billing mode switches to `resell_mode` (from Story 6.1 config endpoint).
 
-- [ ] Task 2: Update product price on change (AC: #3)
-  - [ ] 2.1 When `retail_credit_price` is updated via config endpoint, update Shopify variant price via Admin API.
-  - [ ] 2.2 Use stored access token (AES-256 decrypted) to authenticate Shopify Admin API calls.
+- [x] Task 2: Update product price on change (AC: #3)
+  - [x] 2.1 When `retail_credit_price` is updated via config endpoint, update Shopify variant price via Admin API.
+  - [x] 2.2 Use stored access token (AES-256 decrypted) to authenticate Shopify Admin API calls.
 
-- [ ] Task 3: Cart link generation for plugin (AC: #2)
-  - [ ] 3.1 Add endpoint or extend `/api/v1/stores/config` to return `shopify_variant_id` and `shop_domain`.
-  - [ ] 3.2 Plugin constructs cart link: `https://{shop_domain}/cart/{variant_id}:{quantity}`.
-  - [ ] 3.3 Cart link opens in new tab — shopper completes purchase via native Shopify checkout.
+- [x] Task 3: Cart link generation for plugin (AC: #2)
+  - [x] 3.1 Add endpoint or extend `/api/v1/stores/config` to return `shopify_variant_id` and `shop_domain`.
+  - [x] 3.2 Plugin constructs cart link: `https://{shop_domain}/cart/{variant_id}:{quantity}`.
+  - [x] 3.3 Cart link opens in new tab — shopper completes purchase via native Shopify checkout.
 
-- [ ] Task 4: Write tests (AC: #1-3)
-  - [ ] 4.1 Test enabling resell mode creates hidden Shopify product.
-  - [ ] 4.2 Test product is hidden from Online Store sales channel.
-  - [ ] 4.3 Test price update syncs to Shopify variant.
-  - [ ] 4.4 Test cart link format is correct.
+- [x] Task 4: Write tests (AC: #1-3)
+  - [x] 4.1 Test enabling resell mode creates hidden Shopify product.
+  - [x] 4.2 Test product is hidden from Online Store sales channel.
+  - [x] 4.3 Test price update syncs to Shopify variant.
+  - [x] 4.4 Test cart link format is correct.
 
 ## Dev Notes
 
@@ -80,10 +80,35 @@ so that **shoppers can purchase credits through my store's existing checkout**.
 
 ### Agent Model Used
 
-(to be filled by dev agent)
+Codex GPT-5
 
 ### Debug Log References
 
+- `yarn vitest run apps/next/__tests__/stores-config.route.test.ts packages/api/__tests__/services/shopify-credit-product.test.ts`
+- `node node_modules/vitest/vitest.mjs run wearon-shopify/__tests__/tryon-privacy-flow.test.js`
+
 ### Completion Notes List
 
+- Added Shopify credit product service in `packages/api`:
+  - creates "Try-On Credit" product when missing
+  - updates variant price to match `retail_credit_price`
+  - removes product from Online Store publication
+  - decrypts `stores.access_token_encrypted` before Admin API calls
+- Extended `PATCH /api/v1/stores/config` to:
+  - load current store settings + encrypted token
+  - create/sync hidden Shopify product in `resell_mode`
+  - persist `shopify_product_id` and `shopify_variant_id`
+- Extended `GET /api/v1/stores/config` response with `shopify_variant_id`.
+- Added plugin utility helpers for direct checkout cart links and opening checkout in a new tab.
+- Added schema migration + generated DB type updates for Shopify product/variant columns on `stores`.
+
 ### File List
+
+- `apps/next/app/api/v1/stores/config/route.ts`
+- `apps/next/__tests__/stores-config.route.test.ts`
+- `packages/api/src/services/shopify-credit-product.ts`
+- `packages/api/__tests__/services/shopify-credit-product.test.ts`
+- `packages/api/src/types/database.ts`
+- `supabase/migrations/010_shopify_credit_product_columns.sql`
+- `wearon-shopify/extensions/wearon-tryon/assets/tryon-privacy-flow.js`
+- `wearon-shopify/__tests__/tryon-privacy-flow.test.js`

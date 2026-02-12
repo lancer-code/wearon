@@ -40,7 +40,7 @@ story_location: docs/_bmad/implementation-artifacts
 development_status:
   # Epic 1: Platform Foundation & Unified Generation Pipeline
   epic-1: in-progress
-  1-1-b2b-database-schema: review
+  1-1-b2b-database-schema: in-progress
   1-2-cross-repo-infrastructure: in-progress
   1-3-redis-queue-service-bullmq-removal: in-progress
   epic-1-retrospective: optional
@@ -57,7 +57,7 @@ development_status:
   epic-3: in-progress
   3-1-b2b-store-credit-operations: in-progress
   3-2-stripe-subscription-payg-integration: in-progress
-  3-3-subscription-management-overage: in-progress
+  3-3-subscription-management-overage: review
   epic-3-retrospective: optional
 
   # Epic 4: Shopify Plugin Storefront & Virtual Try-On
@@ -72,8 +72,8 @@ development_status:
   epic-5: in-progress
   5-1-size-rec-proxy-api-endpoint: in-progress
   5-2-body-profile-database-api: in-progress
-  5-3-size-rec-display-confidence: review
-  5-4-mediapipe-pose-estimation-service: ready-for-dev
+  5-3-size-rec-display-confidence: in-progress
+  5-4-mediapipe-pose-estimation-service: review
   epic-5-retrospective: optional
 
   # Epic 6: Resell Mode & Shopper Credits

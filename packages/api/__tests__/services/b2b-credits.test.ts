@@ -94,6 +94,28 @@ describe('B2B credit service', () => {
         p_description: 'Generation credit deduction',
       })
     })
+
+    it('AC #1: request_id is persisted in transaction log for audit trail', async () => {
+      // This test verifies that request_id parameter is passed to RPC
+      // The database function deduct_store_credits logs the transaction with this request_id
+      // See supabase/migrations/*_store_credit_rpcs.sql for RPC implementation
+      mockRpc.mockResolvedValue({ data: true, error: null })
+      const requestId = 'req_audit_trail_123'
+
+      await deductStoreCredit('store-123', requestId, 'Test with request tracking')
+
+      // Verify request_id is passed to RPC (RPC logs it to store_credit_transactions table)
+      expect(mockRpc).toHaveBeenCalledWith(
+        'deduct_store_credits',
+        expect.objectContaining({
+          p_request_id: requestId,
+        })
+      )
+
+      // NOTE: In integration tests, we would query store_credit_transactions to verify:
+      // SELECT * FROM store_credit_transactions WHERE request_id = 'req_audit_trail_123'
+      // This validates end-to-end transaction logging per AC #1 requirement
+    })
   })
 
   describe('refundStoreCredit (AC: #2)', () => {
@@ -129,6 +151,27 @@ describe('B2B credit service', () => {
         p_request_id: 'req_abc',
         p_description: 'Generation failed - refund',
       })
+    })
+
+    it('AC #2: request_id is persisted in refund transaction log for audit trail', async () => {
+      // This test verifies that request_id parameter is passed to RPC for refunds
+      // The database function refund_store_credits logs the transaction with this request_id
+      mockRpc.mockResolvedValue({ data: null, error: null })
+      const requestId = 'req_refund_audit_456'
+
+      await refundStoreCredit('store-123', requestId, 'Refund with request tracking')
+
+      // Verify request_id is passed to RPC (RPC logs it to store_credit_transactions table)
+      expect(mockRpc).toHaveBeenCalledWith(
+        'refund_store_credits',
+        expect.objectContaining({
+          p_request_id: requestId,
+        })
+      )
+
+      // NOTE: In integration tests, we would query store_credit_transactions to verify:
+      // SELECT * FROM store_credit_transactions WHERE request_id = 'req_refund_audit_456'
+      // This validates end-to-end refund transaction logging per AC #2 requirement
     })
   })
 

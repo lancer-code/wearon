@@ -290,6 +290,83 @@ describe('B2B generation REST routes', () => {
     expect(mockPushGenerationTask).not.toHaveBeenCalled()
   })
 
+  it('POST /create in absorb_mode with zero credits but active subscription uses overage billing', async () => {
+    mockDeductStoreCredit.mockResolvedValue(false) // Zero credits
+    mockGetStoreBillingProfile.mockResolvedValue({
+      subscriptionTier: 'growth',
+      subscriptionId: 'sub_active_123',
+      subscriptionStatus: 'active',
+    })
+
+    const request = new Request('http://localhost/api/v1/generation/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        image_urls: ['https://cdn.test/stores/store_123/uploads/model.jpg'],
+      }),
+    })
+
+    const response = await handleGenerationCreatePost(request, testContext)
+    const payload = await response.json()
+
+    // AC #4: Subscribed stores with zero credits use overage, NOT 402
+    expect(response.status).toBe(201)
+    expect(payload).toEqual({
+      data: {
+        session_id: 'session_123',
+        status: 'queued',
+      },
+      error: null,
+    })
+
+    // Verify overage billing was triggered
+    expect(mockLogStoreOverage).toHaveBeenCalledWith({
+      storeId: 'store_123',
+      amount: 1,
+      overageCents: 14, // mockGetTierOverageCents returns 14
+      requestId: 'req_test_123',
+    })
+    expect(mockCreateOverageCharge).toHaveBeenCalledWith({
+      storeId: 'store_123',
+      subscriptionId: 'sub_active_123',
+      amount: 1,
+      requestId: 'req_test_123',
+    })
+  })
+
+  it('POST /create in absorb_mode with zero credits and no subscription returns 402', async () => {
+    mockDeductStoreCredit.mockResolvedValue(false) // Zero credits
+    mockGetStoreBillingProfile.mockResolvedValue({
+      subscriptionTier: null,
+      subscriptionId: null,
+      subscriptionStatus: null,
+    })
+
+    const request = new Request('http://localhost/api/v1/generation/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        image_urls: ['https://cdn.test/stores/store_123/uploads/model.jpg'],
+      }),
+    })
+
+    const response = await handleGenerationCreatePost(request, testContext)
+    const payload = await response.json()
+
+    // AC #4: Non-subscribed stores with zero credits get 402
+    expect(response.status).toBe(402)
+    expect(payload).toEqual({
+      data: null,
+      error: {
+        code: 'INSUFFICIENT_CREDITS',
+        message: 'Insufficient store credits to create generation',
+      },
+    })
+
+    // Verify overage billing was NOT triggered
+    expect(mockLogStoreOverage).not.toHaveBeenCalled()
+    expect(mockCreateOverageCharge).not.toHaveBeenCalled()
+    expect(mockInsert).not.toHaveBeenCalled()
+  })
+
   it('POST /create rejects non-store-scoped image URLs', async () => {
     const request = new Request('http://localhost/api/v1/generation/create', {
       method: 'POST',

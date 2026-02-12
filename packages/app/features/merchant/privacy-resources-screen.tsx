@@ -114,7 +114,7 @@ export function PrivacyResourcesScreen() {
 
   // MEDIUM #3 FIX + MEDIUM #4 FIX: Use useEffect to prevent race conditions and add error handling
   useEffect(() => {
-    import('@my/api/src/templates/privacy-policy')
+    import('../../../api/src/templates/privacy-policy')
       .then((mod) => {
         setTemplates({
           gdpr: mod.getGdprTemplate(storeName),

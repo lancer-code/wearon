@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
-import { withB2BAuth } from '../../../../../../../packages/api/src/middleware/b2b'
-import { createChildLogger } from '../../../../../../../packages/api/src/logger'
-import type { B2BContext } from '../../../../../../../packages/api/src/types/b2b'
+import { withB2BAuth } from '@api/middleware/b2b'
+import { createChildLogger } from '@api/logger'
+import type { B2BContext } from '@api/types/b2b'
 import {
   errorResponse,
   successResponse,
-} from '../../../../../../../packages/api/src/utils/b2b-response'
+} from '@api/utils/b2b-response'
 
 let serviceClient: ReturnType<typeof createClient> | null = null
 

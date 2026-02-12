@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
-import { withB2BAuth } from '../../../../../../../packages/api/src/middleware/b2b'
-import { createChildLogger } from '../../../../../../../packages/api/src/logger'
-import { ensureHiddenTryOnCreditProduct } from '../../../../../../../packages/api/src/services/shopify-credit-product'
-import type { B2BContext } from '../../../../../../../packages/api/src/types/b2b'
+import { withB2BAuth } from '@api/middleware/b2b'
+import { createChildLogger } from '@api/logger'
+import { ensureHiddenTryOnCreditProduct } from '@api/services/shopify-credit-product'
+import type { B2BContext } from '@api/types/b2b'
 import {
   errorResponse,
   successResponse,
-} from '../../../../../../../packages/api/src/utils/b2b-response'
-import { PLUGIN_PRIVACY_DISCLOSURE } from '../../../../../../../packages/api/src/templates/privacy-policy'
+} from '@api/utils/b2b-response'
+import { PLUGIN_PRIVACY_DISCLOSURE } from '@api/templates/privacy-policy'
 
 let serviceClient: ReturnType<typeof createClient> | null = null
 

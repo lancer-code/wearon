@@ -1,9 +1,9 @@
 import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { logger } from '../../../../../../../../packages/api/src/logger'
-import { completeAuth, getShopOwnerEmail } from '../../../../../../../../packages/api/src/services/shopify'
-import { encrypt } from '../../../../../../../../packages/api/src/utils/encryption'
+import { logger } from '@api/logger'
+import { completeAuth, getShopOwnerEmail } from '@api/services/shopify'
+import { encrypt } from '@api/utils/encryption'
 
 function getAdminSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!

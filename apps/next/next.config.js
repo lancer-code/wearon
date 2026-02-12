@@ -22,4 +22,5 @@ module.exports = {
       'react-native-svg': '@tamagui/react-native-svg',
     },
   },
+  serverExternalPackages: ['pino', 'pino-pretty'],
 }

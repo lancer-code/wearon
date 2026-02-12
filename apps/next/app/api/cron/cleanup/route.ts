@@ -1,23 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cleanupExpiredFiles, cleanupOldSessions, recoverStuckJobs } from '../../../../../../../packages/api/src/services/storage-cleanup'
+import { cleanupExpiredFiles, cleanupOldSessions, recoverStuckJobs } from '@api/services/storage-cleanup'
 
-/**
- * Vercel Cron Job: Cleanup expired files from Supabase Storage
- *
- * Schedule: Every 6 hours
- * Vercel cron expression: 0 */6 * * *
- *
- * To configure in Vercel:
- * 1. Add to vercel.json:
- * {
- *   "crons": [{
- *     "path": "/api/cron/cleanup",
- *     "schedule": "0 */6 * * *"
- *   }]
- * }
- *
- * 2. Set CRON_SECRET environment variable in Vercel dashboard
- */
+// Vercel Cron Job: Cleanup expired files from Supabase Storage
+// Schedule: Daily at midnight UTC (cron: 0 0 * * *)
+// Set CRON_SECRET environment variable in Vercel dashboard
 export async function GET(request: NextRequest) {
   // Verify cron secret for security
   const authHeader = request.headers.get('authorization')

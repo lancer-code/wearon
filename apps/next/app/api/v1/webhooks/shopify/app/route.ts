@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { logger } from '../../../../../../../../packages/api/src/logger'
-import { extractRequestId } from '../../../../../../../../packages/api/src/middleware/request-id'
-import { cleanupStore } from '../../../../../../../../packages/api/src/services/store-cleanup'
-import { verifyShopifyHmac } from '../../../../../../../../packages/api/src/utils/shopify-hmac'
-import { toSnakeCase } from '../../../../../../../../packages/api/src/utils/snake-case'
+import { logger } from '@api/logger'
+import { extractRequestId } from '@api/middleware/request-id'
+import { cleanupStore } from '@api/services/store-cleanup'
+import { verifyShopifyHmac } from '@api/utils/shopify-hmac'
+import { toSnakeCase } from '@api/utils/snake-case'
 
 function getAdminSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!

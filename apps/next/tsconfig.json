@@ -11,7 +11,8 @@
       "react-native": [
         "react-native-web"
       ],
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@api/*": ["../../packages/api/src/*"]
     },
     "allowJs": true,
     "skipLibCheck": true,

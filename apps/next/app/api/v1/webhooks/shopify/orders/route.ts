@@ -1,9 +1,9 @@
 import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
-import { logger } from '../../../../../../../../packages/api/src/logger'
-import { extractRequestId } from '../../../../../../../../packages/api/src/middleware/request-id'
-import { logStoreAnalyticsEvent } from '../../../../../../../../packages/api/src/services/store-analytics'
-import { verifyShopifyHmac } from '../../../../../../../../packages/api/src/utils/shopify-hmac'
+import { logger } from '@api/logger'
+import { extractRequestId } from '@api/middleware/request-id'
+import { logStoreAnalyticsEvent } from '@api/services/store-analytics'
+import { verifyShopifyHmac } from '@api/utils/shopify-hmac'
 
 const SHOPIFY_ORDER_TOPIC = 'orders/create'
 const DEFAULT_CURRENCY = 'USD'

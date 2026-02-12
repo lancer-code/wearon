@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
-import { addStoreCredits } from '../../../../../../../packages/api/src/services/b2b-credits'
-import { getTierCredits, type SubscriptionTier } from '../../../../../../../packages/api/src/services/paddle'
+import { addStoreCredits } from '@api/services/b2b-credits'
 import {
   getTierCredits,
+  type SubscriptionTier,
   parsePaddleWebhookEvent,
   verifyPaddleWebhookSignature,
-} from '../../../../../../../packages/api/src/services/paddle'
-import { logger } from '../../../../../../../packages/api/src/logger'
-import { extractRequestId } from '../../../../../../../packages/api/src/middleware/request-id'
+} from '@api/services/paddle'
+import { logger } from '@api/logger'
+import { extractRequestId } from '@api/middleware/request-id'
 
 function getAdminSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL

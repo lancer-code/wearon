@@ -1,6 +1,6 @@
-import { withB2BAuth } from '../../../../../../../packages/api/src/middleware/b2b'
-import { getStoreShopperBalance } from '../../../../../../../packages/api/src/services/b2b-credits'
-import { errorResponse, successResponse } from '../../../../../../../packages/api/src/utils/b2b-response'
+import { withB2BAuth } from '@api/middleware/b2b'
+import { getStoreShopperBalance } from '@api/services/b2b-credits'
+import { errorResponse, successResponse } from '@api/utils/b2b-response'
 
 function extractShopperEmail(request: Request): string | null {
   const raw = request.headers.get('x-shopper-email')

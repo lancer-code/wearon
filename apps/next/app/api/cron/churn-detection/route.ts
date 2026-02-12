@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { runChurnDetectionForAllStores } from '../../../../../../../packages/api/src/services/churn-detection'
+import { runChurnDetectionForAllStores } from '@api/services/churn-detection'
 
 /**
  * Vercel Cron Job: Churn Detection

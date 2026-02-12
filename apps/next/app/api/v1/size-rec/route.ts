@@ -1,12 +1,12 @@
 import axios from 'axios'
 import { z } from 'zod'
-import { createChildLogger } from '../../../../../../packages/api/src/logger'
-import { withB2BAuth } from '../../../../../../packages/api/src/middleware/b2b'
-import type { B2BContext } from '../../../../../../packages/api/src/types/b2b'
+import { createChildLogger } from '@api/logger'
+import { withB2BAuth } from '@api/middleware/b2b'
+import type { B2BContext } from '@api/types/b2b'
 import {
   errorResponse,
   successResponse,
-} from '../../../../../../packages/api/src/utils/b2b-response'
+} from '@api/utils/b2b-response'
 
 const WORKER_TIMEOUT_MS = 5000
 const NFR2_TARGET_MS = 1000

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { beginAuth } from '../../../../../../../packages/api/src/services/shopify'
-import { logger } from '../../../../../../../packages/api/src/logger'
+import { beginAuth } from '@api/services/shopify'
+import { logger } from '@api/logger'
 
 export async function GET(request: Request) {
   const url = new URL(request.url)

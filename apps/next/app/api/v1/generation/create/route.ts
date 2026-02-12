@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
-import { withB2BAuth } from '../../../../../../../packages/api/src/middleware/b2b'
-import { createChildLogger } from '../../../../../../../packages/api/src/logger'
+import { withB2BAuth } from '@api/middleware/b2b'
+import { createChildLogger } from '@api/logger'
 import {
   deductStoreCredit,
   deductStoreShopperCredit,
@@ -8,21 +8,21 @@ import {
   logStoreOverage,
   refundStoreCredit,
   refundStoreShopperCredit,
-} from '../../../../../../../packages/api/src/services/b2b-credits'
+} from '@api/services/b2b-credits'
 import {
   createOverageCharge,
   getTierOverageCents,
   refundOverageCharge,
-} from '../../../../../../../packages/api/src/services/paddle'
-import { pushGenerationTask } from '../../../../../../../packages/api/src/services/redis-queue'
-import { getStoreUploadPath } from '../../../../../../../packages/api/src/services/b2b-storage'
+} from '@api/services/paddle'
+import { pushGenerationTask } from '@api/services/redis-queue'
+import { getStoreUploadPath } from '@api/services/b2b-storage'
 import {
   successResponse,
   errorResponse,
-} from '../../../../../../../packages/api/src/utils/b2b-response'
-import { TASK_PAYLOAD_VERSION } from '../../../../../../../packages/api/src/types/queue'
-import type { GenerationTaskPayload } from '../../../../../../../packages/api/src/types/queue'
-import { logStoreAnalyticsEvent } from '../../../../../../../packages/api/src/services/store-analytics'
+} from '@api/utils/b2b-response'
+import { TASK_PAYLOAD_VERSION } from '@api/types/queue'
+import type { GenerationTaskPayload } from '@api/types/queue'
+import { logStoreAnalyticsEvent } from '@api/services/store-analytics'
 import { createClient } from '@supabase/supabase-js'
 
 const DEFAULT_B2B_PROMPT = `Virtual try-on: Using the provided images:

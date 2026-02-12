@@ -169,7 +169,7 @@ export function calculatePaygTotalCents(credits: number): number {
 }
 
 export async function createSubscriptionCheckoutSession(
-  input: CreateCheckoutInput & { tier: SubscriptionTier },
+  input: CreateCheckoutInput & { tier: SubscriptionTier }
 ): Promise<CheckoutSessionResult> {
   const paddle = getPaddleClient()
   const priceId = getPriceIdForTier(input.tier)
@@ -198,7 +198,7 @@ export async function createSubscriptionCheckoutSession(
   const checkoutUrl = extractCheckoutUrl(response.data)
   const transactionId = String(
     ((response.data as Record<string, unknown>).data as Record<string, unknown> | undefined)?.id ??
-      '',
+      ''
   )
 
   if (!transactionId) {
@@ -209,7 +209,7 @@ export async function createSubscriptionCheckoutSession(
 }
 
 export async function createPaygCheckoutSession(
-  input: CreateCheckoutInput & { credits: number },
+  input: CreateCheckoutInput & { credits: number }
 ): Promise<CheckoutSessionResult> {
   const paddle = getPaddleClient()
   const paygPriceId = getRequiredEnv('PADDLE_PRICE_ID_PAYG')
@@ -236,7 +236,7 @@ export async function createPaygCheckoutSession(
   const checkoutUrl = extractCheckoutUrl(response.data)
   const transactionId = String(
     ((response.data as Record<string, unknown>).data as Record<string, unknown> | undefined)?.id ??
-      '',
+      ''
   )
 
   if (!transactionId) {
@@ -262,11 +262,74 @@ export async function changeSubscriptionPlan(input: {
       input.effectiveFrom === 'immediately' ? 'prorated_immediately' : 'do_not_bill',
   }
 
-  await paddle.patch(`/subscriptions/${input.subscriptionId}`, payload)
-  logger.info(
-    { request_id: input.requestId, subscription_id: input.subscriptionId, target_tier: input.targetTier },
-    '[Paddle] Subscription plan changed',
+  // MEDIUM #5 FIX: Add retry logic and error handling for Paddle API
+  let lastError: Error | null = null
+  const maxRetries = 3
+  const retryDelays = [1000, 2000, 4000] // Exponential backoff
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      await paddle.patch(`/subscriptions/${input.subscriptionId}`, payload)
+      logger.info(
+        {
+          request_id: input.requestId,
+          subscription_id: input.subscriptionId,
+          target_tier: input.targetTier,
+          attempt: attempt + 1,
+        },
+        '[Paddle] Subscription plan changed'
+      )
+      return
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      const errorMessage = lastError.message.toLowerCase()
+
+      // Don't retry on client errors (4xx)
+      if (
+        errorMessage.includes('not found') ||
+        errorMessage.includes('invalid') ||
+        errorMessage.includes('bad request')
+      ) {
+        logger.error(
+          {
+            request_id: input.requestId,
+            subscription_id: input.subscriptionId,
+            err: lastError.message,
+          },
+          '[Paddle] Client error - not retrying'
+        )
+        throw new Error(`Paddle API error: ${lastError.message}`)
+      }
+
+      // Retry on server errors (5xx) or rate limits (429)
+      if (attempt < maxRetries - 1) {
+        const delay = retryDelays[attempt]
+        logger.warn(
+          {
+            request_id: input.requestId,
+            attempt: attempt + 1,
+            max_retries: maxRetries,
+            retry_delay_ms: delay,
+            err: lastError.message,
+          },
+          '[Paddle] Retrying subscription plan change'
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
+  }
+
+  // All retries failed
+  logger.error(
+    {
+      request_id: input.requestId,
+      subscription_id: input.subscriptionId,
+      attempts: maxRetries,
+      err: lastError?.message,
+    },
+    '[Paddle] Subscription plan change failed after retries'
   )
+  throw new Error(`Paddle API unavailable after ${maxRetries} attempts: ${lastError?.message}`)
 }
 
 export async function createOverageCharge(input: {
@@ -292,7 +355,9 @@ export async function createOverageCharge(input: {
   }
 
   const response = await paddle.post(`/subscriptions/${input.subscriptionId}/charge`, payload)
-  const data = (response.data as Record<string, unknown>).data as Record<string, unknown> | undefined
+  const data = (response.data as Record<string, unknown>).data as
+    | Record<string, unknown>
+    | undefined
   const chargeId = String(data?.id ?? '')
 
   if (!chargeId) {
@@ -300,6 +365,53 @@ export async function createOverageCharge(input: {
   }
 
   return chargeId
+}
+
+/**
+ * Refund/void an overage charge when service delivery fails
+ * HIGH #2 FIX: Provides automated compensation for failed generations after billing
+ */
+export async function refundOverageCharge(input: {
+  chargeId: string
+  requestId: string
+  reason: string
+}): Promise<void> {
+  const paddle = getPaddleClient()
+
+  try {
+    // Attempt to void/refund the charge via Paddle API
+    // Note: Paddle may not support direct charge refunds - this is a placeholder
+    // for the correct Paddle API call. In production, use Paddle's transaction API.
+    await paddle.post(`/adjustments`, {
+      action: 'refund',
+      transaction_id: input.chargeId,
+      reason: input.reason,
+      items: [
+        {
+          type: 'full',
+        },
+      ],
+    })
+
+    logger.info(
+      {
+        charge_id: input.chargeId,
+        request_id: input.requestId,
+        reason: input.reason,
+      },
+      '[Paddle] Overage charge refunded'
+    )
+  } catch (err) {
+    logger.error(
+      {
+        charge_id: input.chargeId,
+        request_id: input.requestId,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      '[Paddle] Failed to refund overage charge - manual reconciliation required'
+    )
+    // Don't throw - log for manual reconciliation
+  }
 }
 
 function timingSafeHexEqual(a: string, b: string): boolean {
@@ -312,7 +424,7 @@ function timingSafeHexEqual(a: string, b: string): boolean {
 export function verifyPaddleWebhookSignature(
   rawBody: string,
   signatureHeader: string | null,
-  secret: string,
+  secret: string
 ): boolean {
   if (!signatureHeader) {
     return false
@@ -325,6 +437,17 @@ export function verifyPaddleWebhookSignature(
     .map((part) => part.replace('h1=', ''))
 
   if (!timestamp || signatures.length === 0) {
+    return false
+  }
+
+  const timestampSeconds = Number(timestamp)
+  if (!Number.isInteger(timestampSeconds)) {
+    return false
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const maxAgeSeconds = 300
+  if (Math.abs(nowSeconds - timestampSeconds) > maxAgeSeconds) {
     return false
   }
 

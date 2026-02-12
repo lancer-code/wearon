@@ -43,7 +43,7 @@ async function getStoreForUser(adminSupabase: any, userId: string) {
   const { data: store, error } = await adminSupabase
     .from('stores')
     .select(
-      'id, shop_domain, billing_mode, subscription_tier, subscription_id, subscription_status, subscription_current_period_end, paddle_customer_id, status, onboarding_completed, created_at',
+      'id, shop_domain, billing_mode, subscription_tier, subscription_id, subscription_status, subscription_current_period_end, paddle_customer_id, status, onboarding_completed, created_at'
     )
     .eq('owner_user_id', userId)
     .single()
@@ -72,7 +72,8 @@ export const merchantRouter = router({
       subscriptionTier: (store.subscription_tier as string | null) ?? null,
       subscriptionId: (store.subscription_id as string | null) ?? null,
       subscriptionStatus: (store.subscription_status as string | null) ?? null,
-      subscriptionCurrentPeriodEnd: (store.subscription_current_period_end as string | null) ?? null,
+      subscriptionCurrentPeriodEnd:
+        (store.subscription_current_period_end as string | null) ?? null,
       paddleCustomerId: (store.paddle_customer_id as string | null) ?? null,
       status: store.status as string,
       onboardingCompleted: store.onboarding_completed as boolean,
@@ -148,7 +149,7 @@ export const merchantRouter = router({
             store_id: store.id,
             err: err instanceof Error ? err.message : String(err),
           },
-          '[Merchant] Checkout session creation failed',
+          '[Merchant] Checkout session creation failed'
         )
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -200,21 +201,32 @@ export const merchantRouter = router({
       })
 
       if (isUpgrade && currentTier) {
-        const deltaCredits = Math.max(0, getTierCredits(input.targetTier) - getTierCredits(currentTier))
+        // CRITICAL FIX (HIGH #1): Update store metadata BEFORE granting credits
+        // This prevents double-credit on retry: if credit grant fails, retry won't re-update tier
+        const { error: updateError } = await ctx.adminSupabase
+          .from('stores')
+          .update({ subscription_tier: input.targetTier, subscription_status: 'active' })
+          .eq('id', store.id)
+
+        if (updateError) {
+          throw new Error(`Failed to persist upgraded subscription tier: ${updateError.message}`)
+        }
+
+        const deltaCredits = Math.max(
+          0,
+          getTierCredits(input.targetTier) - getTierCredits(currentTier)
+        )
         if (deltaCredits > 0) {
+          // Credits granted AFTER tier update succeeds
+          // Combined with idempotency protection (migration 014), safe to retry
           await addStoreCredits(
             store.id as string,
             deltaCredits,
             'subscription',
             requestId,
-            `Upgrade ${currentTier} -> ${input.targetTier} delta credits`,
+            `Upgrade ${currentTier} -> ${input.targetTier} delta credits`
           )
         }
-
-        await ctx.adminSupabase
-          .from('stores')
-          .update({ subscription_tier: input.targetTier, subscription_status: 'active' })
-          .eq('id', store.id)
       }
 
       return {
@@ -223,19 +235,43 @@ export const merchantRouter = router({
         effectiveFrom,
       }
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
       logger.error(
         {
           request_id: requestId,
           store_id: store.id,
           subscription_id: subscriptionId,
           target_tier: input.targetTier,
-          err: err instanceof Error ? err.message : String(err),
+          err: errorMessage,
         },
-        '[Merchant] Subscription plan change failed',
+        '[Merchant] Subscription plan change failed'
       )
+
+      // MEDIUM #4 FIX: Provide specific error categories for better debugging
+      if (errorMessage.includes('persist upgraded subscription tier')) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Database error while updating subscription. Please try again.',
+        })
+      }
+
+      if (errorMessage.includes('Paddle') || errorMessage.toLowerCase().includes('payment')) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Payment provider temporarily unavailable. Please try again in a few minutes.',
+        })
+      }
+
+      if (errorMessage.includes('Credit')) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Error processing subscription credits. Please contact support.',
+        })
+      }
+
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to change subscription plan',
+        message: 'Failed to change subscription plan. Please try again or contact support.',
       })
     }
   }),
@@ -288,6 +324,36 @@ export const merchantRouter = router({
   }),
 
   /**
+   * Get recent overage usage records for billing transparency.
+   */
+  getOverageUsage: protectedProcedure.query(async ({ ctx }) => {
+    const store = await getStoreForUser(ctx.adminSupabase, ctx.user.id)
+
+    const { data, error } = await ctx.adminSupabase
+      .from('store_credit_transactions')
+      .select('id, amount, description, request_id, created_at')
+      .eq('store_id', store.id)
+      .eq('type', 'overage')
+      .order('created_at', { ascending: false })
+      .limit(25)
+
+    if (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to load overage history',
+      })
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id as string,
+      amount: Math.abs((row.amount as number | null) ?? 0),
+      description: (row.description as string | null) ?? 'Overage usage',
+      requestId: (row.request_id as string | null) ?? null,
+      createdAt: (row.created_at as string | null) ?? null,
+    }))
+  }),
+
+  /**
    * Regenerate the API key for the merchant's store.
    * Invalidates the old key and creates a new one.
    * Returns the full key ONCE.
@@ -314,7 +380,7 @@ export const merchantRouter = router({
     if (insertError) {
       logger.error(
         { store_id: store.id, err: insertError.message },
-        '[Merchant] API key regeneration failed',
+        '[Merchant] API key regeneration failed'
       )
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',

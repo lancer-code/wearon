@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   calculatePaygTotalCents,
   getTierCredits,
@@ -9,6 +9,10 @@ import {
 } from '../../src/services/paddle'
 
 describe('paddle service helpers', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('calculates PAYG totals correctly', () => {
     expect(calculatePaygTotalCents(1)).toBe(18)
     expect(calculatePaygTotalCents(100)).toBe(1800)
@@ -26,7 +30,7 @@ describe('paddle service helpers', () => {
 
   it('verifies paddle webhook signature with ts/h1 format', () => {
     const secret = 'test_webhook_secret'
-    const timestamp = '1700000000'
+    const timestamp = String(Math.floor(Date.now() / 1000))
     const body = JSON.stringify({ event_id: 'evt_123', event_type: 'transaction.completed' })
     const digest = crypto.createHmac('sha256', secret).update(`${timestamp}:${body}`).digest('hex')
     const signatureHeader = `ts=${timestamp};h1=${digest}`
@@ -34,6 +38,27 @@ describe('paddle service helpers', () => {
     expect(verifyPaddleWebhookSignature(body, signatureHeader, secret)).toBe(true)
     expect(verifyPaddleWebhookSignature(body, `ts=${timestamp};h1=deadbeef`, secret)).toBe(false)
     expect(verifyPaddleWebhookSignature(body, null, secret)).toBe(false)
+  })
+
+  it('rejects stale webhook signatures older than 5 minutes', () => {
+    const secret = 'test_webhook_secret'
+    const timestamp = '1700000000'
+    const body = JSON.stringify({ event_id: 'evt_123', event_type: 'transaction.completed' })
+    const digest = crypto.createHmac('sha256', secret).update(`${timestamp}:${body}`).digest('hex')
+    const signatureHeader = `ts=${timestamp};h1=${digest}`
+
+    vi.spyOn(Date, 'now').mockReturnValue((1700000000 + 301) * 1000)
+
+    expect(verifyPaddleWebhookSignature(body, signatureHeader, secret)).toBe(false)
+  })
+
+  it('rejects malformed timestamp values', () => {
+    const secret = 'test_webhook_secret'
+    const body = JSON.stringify({ event_id: 'evt_123', event_type: 'transaction.completed' })
+    const digest = crypto.createHmac('sha256', secret).update(`not-a-number:${body}`).digest('hex')
+    const signatureHeader = `ts=not-a-number;h1=${digest}`
+
+    expect(verifyPaddleWebhookSignature(body, signatureHeader, secret)).toBe(false)
   })
 
   it('parses webhook event payload', () => {

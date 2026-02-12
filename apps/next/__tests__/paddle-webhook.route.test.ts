@@ -3,12 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockAddStoreCredits = vi.fn()
 const mockInsertBillingWebhookEvent = vi.fn()
+const mockSelectBillingWebhookEvent = vi.fn()
 const mockStoreSelectSingle = vi.fn()
 const mockStoreUpdateEq = vi.fn()
+const mockUpdateStore = vi.fn()
 const mockExtractRequestId = vi.fn(() => 'req_test_paddle_webhook')
 
 vi.mock('../../../packages/api/src/services/b2b-credits', () => ({
-  addStoreCredits: (...args: unknown[]) => mockAddStoreCredits(...args),
+  addStoreCredits: (...args: unknown[]) => {
+    mockAddStoreCredits(...args)
+    return Promise.resolve({ success: true })
+  },
 }))
 
 vi.mock('../../../packages/api/src/middleware/request-id', () => ({
@@ -29,6 +34,11 @@ vi.mock('@supabase/supabase-js', () => ({
     from: (table: string) => {
       if (table === 'billing_webhook_events') {
         return {
+          select: () => ({
+            eq: () => ({
+              single: () => mockSelectBillingWebhookEvent(),
+            }),
+          }),
           insert: (...args: unknown[]) => mockInsertBillingWebhookEvent(...args),
         }
       }
@@ -40,9 +50,12 @@ vi.mock('@supabase/supabase-js', () => ({
               single: () => mockStoreSelectSingle(),
             }),
           }),
-          update: () => ({
-            eq: (...args: unknown[]) => mockStoreUpdateEq(...args),
-          }),
+          update: (...args: unknown[]) => {
+            mockUpdateStore(...args)
+            return {
+              eq: (...eqArgs: unknown[]) => mockStoreUpdateEq(...eqArgs),
+            }
+          },
         }
       }
 
@@ -68,9 +81,12 @@ describe('POST /api/v1/webhooks/paddle', () => {
 
     vi.spyOn(Date, 'now').mockReturnValue(1700000000 * 1000)
 
+    // Mock defaults: no duplicate, no existing store data
+    mockSelectBillingWebhookEvent.mockResolvedValue({ data: null, error: null })
     mockInsertBillingWebhookEvent.mockResolvedValue({ error: null })
-    mockStoreSelectSingle.mockResolvedValue({ data: null, error: null })
+    mockStoreSelectSingle.mockResolvedValue({ data: { subscription_tier: 'growth' }, error: null })
     mockStoreUpdateEq.mockResolvedValue({ error: null })
+    mockUpdateStore.mockReturnValue(undefined)
     mockAddStoreCredits.mockResolvedValue(undefined)
   })
 
@@ -234,5 +250,138 @@ describe('POST /api/v1/webhooks/paddle', () => {
       'req_test_paddle_webhook',
       'Paddle subscription top-up (growth)'
     )
+  })
+
+  it('grants renewal credits on subscription.updated with active status', async () => {
+    const rawBody = JSON.stringify({
+      event_id: 'evt_renewal_updated',
+      event_type: 'subscription.updated',
+      data: {
+        subscription_id: 'sub_renewal_123',
+        status: 'active',
+        customer_id: 'ctm_renewal',
+        custom_data: {
+          store_id: 'store_renewal_123',
+        },
+        current_billing_period: {
+          ends_at: '2026-03-13T00:00:00Z',
+        },
+      },
+    })
+
+    const request = new Request('http://localhost/api/v1/webhooks/paddle', {
+      method: 'POST',
+      body: rawBody,
+      headers: {
+        'Paddle-Signature': makePaddleSignature(rawBody, process.env.PADDLE_WEBHOOK_SECRET!),
+      },
+    })
+
+    const response = await POST(request)
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      data: { acknowledged: true },
+      error: null,
+    })
+
+    // Verify renewal credits were granted (AC #3)
+    expect(mockAddStoreCredits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storeId: 'store_renewal_123',
+        description: expect.stringContaining('Subscription renewal'),
+      }),
+    )
+  })
+
+  it('updates subscription status to past_due on payment failure', async () => {
+    const rawBody = JSON.stringify({
+      event_id: 'evt_payment_failed',
+      event_type: 'subscription.past_due',
+      data: {
+        subscription_id: 'sub_failed_123',
+        status: 'past_due',
+        customer_id: 'ctm_failed',
+        custom_data: {
+          store_id: 'store_failed_123',
+        },
+      },
+    })
+
+    const request = new Request('http://localhost/api/v1/webhooks/paddle', {
+      method: 'POST',
+      body: rawBody,
+      headers: {
+        'Paddle-Signature': makePaddleSignature(rawBody, process.env.PADDLE_WEBHOOK_SECRET!),
+      },
+    })
+
+    const response = await POST(request)
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      data: { acknowledged: true },
+      error: null,
+    })
+
+    // Verify store subscription status was updated to past_due (AC #4)
+    expect(mockUpdateStore).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subscription_status: 'past_due',
+      }),
+    )
+  })
+
+  it('rejects duplicate webhook events for idempotency', async () => {
+    // First webhook should succeed
+    const rawBody = JSON.stringify({
+      event_id: 'evt_duplicate_test',
+      event_type: 'transaction.completed',
+      data: {
+        customer_id: 'ctm_dup',
+        custom_data: {
+          purchase_type: 'payg',
+          store_id: 'store_dup',
+          credits: 10,
+        },
+      },
+    })
+
+    const request1 = new Request('http://localhost/api/v1/webhooks/paddle', {
+      method: 'POST',
+      body: rawBody,
+      headers: {
+        'Paddle-Signature': makePaddleSignature(rawBody, process.env.PADDLE_WEBHOOK_SECRET!),
+      },
+    })
+
+    const response1 = await POST(request1)
+    expect(response1.status).toBe(200)
+
+    // Mock duplicate check to return existing event
+    mockSelectBillingWebhookEvent.mockResolvedValueOnce({ data: { event_id: 'evt_duplicate_test' }, error: null })
+
+    // Second identical webhook should be rejected as duplicate
+    const request2 = new Request('http://localhost/api/v1/webhooks/paddle', {
+      method: 'POST',
+      body: rawBody,
+      headers: {
+        'Paddle-Signature': makePaddleSignature(rawBody, process.env.PADDLE_WEBHOOK_SECRET!),
+      },
+    })
+
+    const response2 = await POST(request2)
+    const payload2 = await response2.json()
+
+    expect(response2.status).toBe(200)
+    expect(payload2).toEqual({
+      data: { acknowledged: true, duplicate: true },
+      error: null,
+    })
+
+    // Credits should only be granted once
+    expect(mockAddStoreCredits).toHaveBeenCalledTimes(1)
   })
 })

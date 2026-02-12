@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { addStoreCredits } from '../../../../../../../packages/api/src/services/b2b-credits'
+import { getTierCredits, type SubscriptionTier } from '../../../../../../../packages/api/src/services/paddle'
 import {
   getTierCredits,
   parsePaddleWebhookEvent,
@@ -195,8 +196,69 @@ async function handleSubscriptionEvent(input: {
     updatePayload.subscription_current_period_end = currentPeriodEnd
   }
 
+  // Update store subscription metadata
   if (Object.keys(updatePayload).length > 0) {
-    await supabase.from('stores').update(updatePayload).eq('id', storeId)
+    const { error: updateError } = await supabase.from('stores').update(updatePayload).eq('id', storeId)
+
+    if (updateError) {
+      logger.error(
+        { request_id: requestId, store_id: storeId, err: updateError.message },
+        '[Paddle Webhook] Failed to update store subscription metadata',
+      )
+      throw new Error(`Store subscription update failed: ${updateError.message}`)
+    }
+  }
+
+  // AC #3: Grant recurring tier credits on subscription renewal/activation
+  // Renewal events: subscription.updated with status=active and subscription.activated
+  const isRenewalEvent =
+    (eventType === 'subscription.updated' && subscriptionStatus === 'active') ||
+    eventType === 'subscription.activated'
+
+  if (isRenewalEvent) {
+    // Get store's subscription tier to determine credit amount
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('subscription_tier')
+      .eq('id', storeId)
+      .single()
+
+    if (storeError || !store) {
+      logger.error(
+        { request_id: requestId, store_id: storeId, err: storeError?.message },
+        '[Paddle Webhook] Failed to fetch store tier for renewal credit grant',
+      )
+      throw new Error('Store lookup failed for renewal crediting')
+    }
+
+    const tier = store.subscription_tier as SubscriptionTier | null
+    if (tier) {
+      const credits = getTierCredits(tier)
+      const creditResult = await addStoreCredits({
+        storeId,
+        amount: credits,
+        description: `Subscription renewal: ${tier} tier monthly credits`,
+        requestId,
+      })
+
+      if (!creditResult.success) {
+        logger.error(
+          { request_id: requestId, store_id: storeId, tier, credits },
+          '[Paddle Webhook] Failed to grant renewal credits',
+        )
+        throw new Error(`Renewal credit grant failed: ${creditResult.error}`)
+      }
+
+      logger.info(
+        { request_id: requestId, store_id: storeId, tier, credits },
+        '[Paddle Webhook] Renewal credits granted',
+      )
+    } else {
+      logger.warn(
+        { request_id: requestId, store_id: storeId },
+        '[Paddle Webhook] Renewal event but no subscription tier found',
+      )
+    }
   }
 }
 
@@ -219,7 +281,7 @@ export async function POST(request: Request) {
   if (!isValid) {
     logger.warn({ request_id: requestId }, '[Paddle Webhook] Signature verification failed')
     return Response.json(
-      { data: null, error: { code: 'INVALID_API_KEY', message: 'Invalid webhook signature' } },
+      { data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid webhook signature' } },
       { status: 401 },
     )
   }
@@ -250,6 +312,37 @@ export async function POST(request: Request) {
   const customData = (data.custom_data as Record<string, unknown> | undefined) ?? {}
   const candidateStoreId = safeString(customData.store_id)
 
+  // CRITICAL FIX: Check for duplicate BEFORE processing (idempotency guard)
+  const { data: existingEvent } = await supabase
+    .from('billing_webhook_events')
+    .select('event_id')
+    .eq('event_id', eventId)
+    .single()
+
+  if (existingEvent) {
+    logger.info({ request_id: requestId, event_id: eventId }, '[Paddle Webhook] Duplicate event ignored')
+    return Response.json({ data: { acknowledged: true, duplicate: true }, error: null })
+  }
+
+  // Process business logic BEFORE persisting audit row
+  try {
+    if (eventType === 'transaction.completed') {
+      await handleTransactionCompleted({ supabase, requestId, data })
+    } else if (eventType.startsWith('subscription.')) {
+      await handleSubscriptionEvent({ supabase, requestId, eventType, data })
+    } else {
+      logger.info({ request_id: requestId, event_type: eventType }, '[Paddle Webhook] Event acknowledged')
+    }
+  } catch (err) {
+    // Processing failed - DO NOT insert audit row so webhook can be retried
+    logger.error({ request_id: requestId, event_id: eventId, err }, '[Paddle Webhook] Processing failed, will retry')
+    return Response.json(
+      { data: null, error: { code: 'INTERNAL_ERROR', message: 'Webhook processing failed' } },
+      { status: 500 },
+    )
+  }
+
+  // Only persist audit row AFTER successful processing
   const { error: insertError } = await supabase.from('billing_webhook_events').insert({
     provider: 'paddle',
     event_id: eventId,
@@ -260,35 +353,11 @@ export async function POST(request: Request) {
   })
 
   if (insertError) {
-    const isDuplicate = (insertError as { code?: string }).code === '23505'
-    if (isDuplicate) {
-      logger.info({ request_id: requestId, event_id: eventId }, '[Paddle Webhook] Duplicate event ignored')
-      return Response.json({ data: { acknowledged: true, duplicate: true }, error: null })
-    }
-
+    // Audit persistence failed but processing succeeded - log but acknowledge webhook
+    // Next retry will be caught by duplicate check above
     logger.error(
       { request_id: requestId, event_id: eventId, err: insertError.message },
-      '[Paddle Webhook] Failed to persist event audit record',
-    )
-    return Response.json(
-      { data: null, error: { code: 'INTERNAL_ERROR', message: 'Failed to persist webhook event' } },
-      { status: 500 },
-    )
-  }
-
-  try {
-    if (eventType === 'transaction.completed') {
-      await handleTransactionCompleted({ supabase, requestId, data })
-    } else if (eventType.startsWith('subscription.')) {
-      await handleSubscriptionEvent({ supabase, requestId, eventType, data })
-    } else {
-      logger.info({ request_id: requestId, event_type: eventType }, '[Paddle Webhook] Event acknowledged')
-    }
-  } catch (err) {
-    logger.error({ request_id: requestId, event_id: eventId, err }, '[Paddle Webhook] Processing failed')
-    return Response.json(
-      { data: null, error: { code: 'INTERNAL_ERROR', message: 'Webhook processing failed' } },
-      { status: 500 },
+      '[Paddle Webhook] Audit insert failed after successful processing (non-fatal)',
     )
   }
 

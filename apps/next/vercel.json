@@ -1,5 +1,6 @@
 {
   "installCommand": "yarn install",
+  "buildCommand": "yarn build",
   "crons": [
     {
       "path": "/api/cron/cleanup",

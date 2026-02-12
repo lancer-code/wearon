@@ -78,9 +78,9 @@ development_status:
 
   # Epic 6: Resell Mode & Shopper Credits
   epic-6: in-progress
-  6-1-billing-mode-configuration: review
-  6-2-hidden-shopify-product-creation: review
-  6-3-shopify-order-webhook-processing: review
+  6-1-billing-mode-configuration: done
+  6-2-hidden-shopify-product-creation: done
+  6-3-shopify-order-webhook-processing: done
   6-4-shopper-credit-balance-plugin-flow: review
   epic-6-retrospective: optional
 
@@ -94,6 +94,6 @@ development_status:
 
   # Epic 8: Privacy, Compliance & Trust
   epic-8: in-progress
-  8-1-gdpr-ccpa-privacy-policy-templates: ready-for-dev
-  8-2-coppa-age-gating: ready-for-dev
+  8-1-gdpr-ccpa-privacy-policy-templates: review
+  8-2-coppa-age-gating: review
   epic-8-retrospective: optional

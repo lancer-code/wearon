@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -176,14 +177,58 @@ describe('B2B Schema - Migration 005-007', () => {
     })
   })
 
+  describe('deduct_store_credits() concurrency safety', () => {
+    it('allows only one successful deduction when two requests race on 1 balance', async () => {
+      const requestIdA = `req_test_race_a_${Date.now()}`
+      const requestIdB = `req_test_race_b_${Date.now()}`
+
+      await supabase
+        .from('store_credits')
+        .update({ balance: 1, total_purchased: 1, total_spent: 0 })
+        .eq('store_id', testStoreId)
+
+      const [resA, resB] = await Promise.all([
+        supabase.rpc('deduct_store_credits', {
+          p_store_id: testStoreId,
+          p_amount: 1,
+          p_request_id: requestIdA,
+          p_description: 'Race condition test A',
+        }),
+        supabase.rpc('deduct_store_credits', {
+          p_store_id: testStoreId,
+          p_amount: 1,
+          p_request_id: requestIdB,
+          p_description: 'Race condition test B',
+        }),
+      ])
+
+      expect(resA.error).toBeNull()
+      expect(resB.error).toBeNull()
+
+      const successCount = [resA.data, resB.data].filter(Boolean).length
+      expect(successCount).toBe(1)
+
+      const { data: credits, error: creditsError } = await supabase
+        .from('store_credits')
+        .select('balance, total_spent')
+        .eq('store_id', testStoreId)
+        .single()
+
+      expect(creditsError).toBeNull()
+      expect(credits!.balance).toBe(0)
+      expect(credits!.total_spent).toBe(1)
+    })
+  })
+
   // =========================================================================
   // Task 4.4: CHECK constraints
   // =========================================================================
   describe('CHECK constraints', () => {
     it('should reject invalid billing_mode on stores', async () => {
-      const { error } = await supabase
-        .from('stores')
-        .insert({ shop_domain: `invalid-mode-${Date.now()}.myshopify.com`, billing_mode: 'invalid_mode' })
+      const { error } = await supabase.from('stores').insert({
+        shop_domain: `invalid-mode-${Date.now()}.myshopify.com`,
+        billing_mode: 'invalid_mode',
+      })
 
       expect(error).not.toBeNull()
       expect(error!.message).toContain('violates check constraint')
@@ -199,14 +244,12 @@ describe('B2B Schema - Migration 005-007', () => {
     })
 
     it('should reject invalid status on store_generation_sessions', async () => {
-      const { error } = await supabase
-        .from('store_generation_sessions')
-        .insert({
-          store_id: testStoreId,
-          status: 'pending',
-          model_image_url: 'https://example.com/test.jpg',
-          prompt_system: 'test prompt',
-        })
+      const { error } = await supabase.from('store_generation_sessions').insert({
+        store_id: testStoreId,
+        status: 'pending',
+        model_image_url: 'https://example.com/test.jpg',
+        prompt_system: 'test prompt',
+      })
 
       expect(error).not.toBeNull()
       expect(error!.message).toContain('violates check constraint')
@@ -235,16 +278,48 @@ describe('B2B Schema - Migration 005-007', () => {
     })
 
     it('should reject invalid transaction type on store_credit_transactions', async () => {
-      const { error } = await supabase
-        .from('store_credit_transactions')
-        .insert({
-          store_id: testStoreId,
-          amount: 5,
-          type: 'bonus',
-        })
+      const { error } = await supabase.from('store_credit_transactions').insert({
+        store_id: testStoreId,
+        amount: 5,
+        type: 'bonus',
+      })
 
       expect(error).not.toBeNull()
       expect(error!.message).toContain('violates check constraint')
+    })
+
+    it('should reject invalid plaintext-like key_hash values', async () => {
+      const { error } = await supabase.from('store_api_keys').insert({
+        store_id: testStoreId,
+        key_hash: 'wk_this_is_not_a_sha256_hash',
+        allowed_domains: ['example.com'],
+        is_active: true,
+      })
+
+      expect(error).not.toBeNull()
+      expect(error!.message).toContain('violates check constraint')
+    })
+
+    it('should allow 64-char lowercase hex key_hash values', async () => {
+      const keyHash = crypto.createHash('sha256').update(`test-key-${Date.now()}`).digest('hex')
+
+      const { data, error } = await supabase
+        .from('store_api_keys')
+        .insert({
+          store_id: testStoreId,
+          key_hash: keyHash,
+          allowed_domains: ['example.com'],
+          is_active: true,
+        })
+        .select('id')
+        .single()
+
+      expect(error).toBeNull()
+      expect(data).not.toBeNull()
+
+      if (data) {
+        await supabase.from('store_api_keys').delete().eq('id', data.id)
+      }
     })
   })
 
@@ -282,37 +357,30 @@ describe('B2B Schema - Migration 005-007', () => {
       const orderId = `order_${Date.now()}`
 
       // First insert should succeed
-      const { error: err1 } = await supabase
-        .from('store_shopper_purchases')
-        .insert({
-          store_id: testStoreId,
-          shopper_email: 'test@test.com',
-          shopify_order_id: orderId,
-          credits_purchased: 5,
-          amount_paid: 4.99,
-        })
+      const { error: err1 } = await supabase.from('store_shopper_purchases').insert({
+        store_id: testStoreId,
+        shopper_email: 'test@test.com',
+        shopify_order_id: orderId,
+        credits_purchased: 5,
+        amount_paid: 4.99,
+      })
 
       expect(err1).toBeNull()
 
       // Duplicate order_id should fail (idempotent webhook safety)
-      const { error: err2 } = await supabase
-        .from('store_shopper_purchases')
-        .insert({
-          store_id: testStoreId,
-          shopper_email: 'test@test.com',
-          shopify_order_id: orderId,
-          credits_purchased: 5,
-          amount_paid: 4.99,
-        })
+      const { error: err2 } = await supabase.from('store_shopper_purchases').insert({
+        store_id: testStoreId,
+        shopper_email: 'test@test.com',
+        shopify_order_id: orderId,
+        credits_purchased: 5,
+        amount_paid: 4.99,
+      })
 
       expect(err2).not.toBeNull()
       expect(err2!.message).toContain('duplicate key')
 
       // Cleanup
-      await supabase
-        .from('store_shopper_purchases')
-        .delete()
-        .eq('shopify_order_id', orderId)
+      await supabase.from('store_shopper_purchases').delete().eq('shopify_order_id', orderId)
     })
   })
 

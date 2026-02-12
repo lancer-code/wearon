@@ -101,8 +101,9 @@ describe('POST /api/v1/size-rec', () => {
     expect(payload.data).toHaveProperty('body_type')
     expect(payload.data).not.toHaveProperty('recommendedSize')
     expect(payload.data).not.toHaveProperty('bodyType')
-    expect(response.headers.get('X-Size-Rec-Latency-Ms')).toBeTruthy()
-    expect(response.headers.get('X-Size-Rec-Target-Ms')).toBe('1000')
+    // LOW #4 FIX: Timing headers removed to prevent ML model inference attacks
+    expect(response.headers.get('X-Size-Rec-Latency-Ms')).toBeNull()
+    expect(response.headers.get('X-Size-Rec-Target-Ms')).toBeNull()
   })
 
   it('records NFR2 latency violations when worker response exceeds 1s target', async () => {
@@ -115,7 +116,11 @@ describe('POST /api/v1/size-rec', () => {
       },
     })
     const nowSpy = vi.spyOn(Date, 'now')
-    nowSpy.mockReturnValueOnce(1000).mockReturnValueOnce(2305)
+    // MEDIUM #3 FIX: Rate limiter also calls Date.now(), so we need extra mock value
+    nowSpy
+      .mockReturnValueOnce(1000) // Rate limit check
+      .mockReturnValueOnce(1000) // startedAtMs
+      .mockReturnValueOnce(2305) // responseTimeMs calculation
 
     const request = new Request('http://localhost/api/v1/size-rec', {
       method: 'POST',
@@ -132,6 +137,7 @@ describe('POST /api/v1/size-rec', () => {
       expect.objectContaining({
         response_time_ms: 1305,
         nfr_target_ms: 1000,
+        worker_id: expect.any(String), // LOW #5 FIX: worker_id hash instead of worker_url
       }),
       '[B2B Size Rec] Response exceeded NFR2 target'
     )
@@ -167,7 +173,10 @@ describe('POST /api/v1/size-rec', () => {
 
     expect(mockLoggerError).toHaveBeenCalled()
     const [logMeta] = mockLoggerError.mock.calls[0] as [Record<string, unknown>, string]
-    expect(logMeta.worker_url).toBe('https://worker.example')
+    // LOW #5 FIX: worker_id hash instead of exposing full worker_url
+    expect(logMeta.worker_id).toBeTruthy()
+    expect(logMeta.worker_id).toMatch(/^worker_[a-f0-9]+$/)
+    expect(logMeta.worker_url).toBeUndefined()
     expect(logMeta.request_id).toBeUndefined()
     expect(JSON.stringify(logMeta)).not.toContain('image_url')
     expect(JSON.stringify(logMeta)).not.toContain('secret-token')
@@ -282,5 +291,174 @@ describe('POST /api/v1/size-rec', () => {
       expect(response.status).toBe(200)
       expect(mockAxiosPost).toHaveBeenCalled()
     }
+  })
+
+  it('[HIGH #1] rejects worker response with excessive measurement keys to prevent DoS', async () => {
+    const massiveMeasurements: Record<string, number> = {}
+    for (let i = 0; i < 25; i++) {
+      massiveMeasurements[`chest_cm_${i}`] = 90
+    }
+
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        recommended_size: 'M',
+        measurements: massiveMeasurements,
+        confidence: 0.85,
+        body_type: 'athletic',
+      },
+    })
+
+    const request = new Request('http://localhost/api/v1/size-rec', {
+      method: 'POST',
+      body: JSON.stringify({
+        image_url: 'https://test.supabase.co/storage/v1/object/image.jpg',
+        height_cm: 175,
+      }),
+    })
+
+    const response = await handleSizeRecPost(request, testContext)
+    const payload = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(payload.error.code).toBe('SERVICE_UNAVAILABLE')
+  })
+
+  it('[HIGH #1] rejects worker response with invalid measurement keys', async () => {
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        recommended_size: 'M',
+        measurements: {
+          chest_cm: 96,
+          malicious_key: 999,
+          __proto__: 123,
+        },
+        confidence: 0.85,
+        body_type: 'athletic',
+      },
+    })
+
+    const request = new Request('http://localhost/api/v1/size-rec', {
+      method: 'POST',
+      body: JSON.stringify({
+        image_url: 'https://test.supabase.co/storage/v1/object/image.jpg',
+        height_cm: 175,
+      }),
+    })
+
+    const response = await handleSizeRecPost(request, testContext)
+    const payload = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(payload.error.code).toBe('SERVICE_UNAVAILABLE')
+  })
+
+  it('[MEDIUM #2] rejects height_cm with excessive decimal precision', async () => {
+    const invalidHeights = [
+      175.123, // More than 1 decimal place
+      180.9999999, // Extreme precision
+    ]
+
+    for (const height of invalidHeights) {
+      vi.clearAllMocks()
+
+      const request = new Request('http://localhost/api/v1/size-rec', {
+        method: 'POST',
+        body: JSON.stringify({
+          image_url: 'https://test.supabase.co/storage/v1/object/image.jpg',
+          height_cm: height,
+        }),
+      })
+
+      const response = await handleSizeRecPost(request, testContext)
+      const payload = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(payload.error.code).toBe('VALIDATION_ERROR')
+      expect(mockAxiosPost).not.toHaveBeenCalled()
+    }
+  })
+
+  it('[MEDIUM #2] accepts height_cm with valid precision (0 or 1 decimal place)', async () => {
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        recommended_size: 'M',
+        measurements: { chest_cm: 96 },
+        confidence: 0.85,
+        body_type: null,
+      },
+    })
+
+    const validHeights = [175, 175.0, 175.5, 180.1]
+
+    for (const height of validHeights) {
+      vi.clearAllMocks()
+
+      const request = new Request('http://localhost/api/v1/size-rec', {
+        method: 'POST',
+        body: JSON.stringify({
+          image_url: 'https://test.supabase.co/storage/v1/object/image.jpg',
+          height_cm: height,
+        }),
+      })
+
+      const response = await handleSizeRecPost(request, testContext)
+
+      expect(response.status).toBe(200)
+      expect(mockAxiosPost).toHaveBeenCalled()
+    }
+  })
+
+  it('[MEDIUM #3] enforces per-store rate limit (100 requests per hour)', async () => {
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        recommended_size: 'M',
+        measurements: { chest_cm: 96 },
+        confidence: 0.85,
+        body_type: null,
+      },
+    })
+
+    // Use a unique store ID for this test to avoid interference
+    const rateLimitTestContext = {
+      ...testContext,
+      storeId: 'store_rate_limit_test_' + Date.now(),
+    }
+
+    // Make 100 requests (should all succeed)
+    for (let i = 0; i < 100; i++) {
+      vi.clearAllMocks()
+
+      const request = new Request('http://localhost/api/v1/size-rec', {
+        method: 'POST',
+        body: JSON.stringify({
+          image_url: 'https://test.supabase.co/storage/v1/object/image.jpg',
+          height_cm: 175,
+        }),
+      })
+
+      const response = await handleSizeRecPost(request, rateLimitTestContext)
+      if (response.status !== 200) {
+        const payload = await response.json()
+        throw new Error(`Request ${i + 1} failed unexpectedly: ${payload.error.code}`)
+      }
+    }
+
+    // 101st request should be rate limited
+    vi.clearAllMocks()
+
+    const request = new Request('http://localhost/api/v1/size-rec', {
+      method: 'POST',
+      body: JSON.stringify({
+        image_url: 'https://test.supabase.co/storage/v1/object/image.jpg',
+        height_cm: 175,
+      }),
+    })
+
+    const response = await handleSizeRecPost(request, rateLimitTestContext)
+    const payload = await response.json()
+
+    expect(response.status).toBe(429)
+    expect(payload.error.code).toBe('RATE_LIMIT_EXCEEDED')
+    expect(mockAxiosPost).not.toHaveBeenCalled()
   })
 })

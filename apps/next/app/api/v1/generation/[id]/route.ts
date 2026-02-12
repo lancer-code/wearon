@@ -1,6 +1,10 @@
-import { withB2BAuth } from '../../../../../../packages/api/src/middleware/b2b'
-import { createChildLogger } from '../../../../../../packages/api/src/logger'
-import { successResponse, errorResponse, notFoundResponse } from '../../../../../../packages/api/src/utils/b2b-response'
+import { withB2BAuth } from '../../../../../../../packages/api/src/middleware/b2b'
+import { createChildLogger } from '../../../../../../../packages/api/src/logger'
+import {
+  successResponse,
+  errorResponse,
+  notFoundResponse,
+} from '../../../../../../../packages/api/src/utils/b2b-response'
 import { createClient } from '@supabase/supabase-js'
 
 let serviceClient: ReturnType<typeof createClient> | null = null
@@ -19,7 +23,13 @@ function getServiceClient() {
   return serviceClient
 }
 
-export const GET = withB2BAuth(async (request, context) => {
+export async function handleGenerationStatusGet(
+  request: Request,
+  context: {
+    storeId: string
+    requestId: string
+  }
+) {
   const log = createChildLogger(context.requestId)
 
   // Extract session ID from URL path
@@ -42,12 +52,27 @@ export const GET = withB2BAuth(async (request, context) => {
   // Query scoped to store_id — prevents cross-tenant access
   const { data: session, error } = await supabase
     .from('store_generation_sessions')
-    .select('id, store_id, status, model_image_url, outfit_image_url, generated_image_url, error_message, credits_used, request_id, created_at, completed_at')
+    .select(
+      'id, store_id, status, model_image_url, outfit_image_url, generated_image_url, error_message, credits_used, request_id, created_at, completed_at'
+    )
     .eq('id', sessionId)
     .eq('store_id', context.storeId)
     .single()
 
-  if (error || !session) {
+  if (error?.code === 'PGRST116') {
+    log.info({ sessionId, storeId: context.storeId }, '[B2B Generation] Session not found')
+    return notFoundResponse('Generation session not found')
+  }
+
+  if (error) {
+    log.error(
+      { sessionId, storeId: context.storeId, err: error.message, code: error.code },
+      '[B2B Generation] Session query failed'
+    )
+    return errorResponse('INTERNAL_ERROR', 'Failed to load generation session', 500)
+  }
+
+  if (!session) {
     log.info({ sessionId, storeId: context.storeId }, '[B2B Generation] Session not found')
     return notFoundResponse('Generation session not found')
   }
@@ -64,4 +89,6 @@ export const GET = withB2BAuth(async (request, context) => {
     createdAt: session.created_at,
     completedAt: session.completed_at,
   })
-})
+}
+
+export const GET = withB2BAuth(handleGenerationStatusGet)

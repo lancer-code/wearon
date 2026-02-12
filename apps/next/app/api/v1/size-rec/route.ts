@@ -12,6 +12,53 @@ const WORKER_TIMEOUT_MS = 5000
 const NFR2_TARGET_MS = 1000
 const SIZE_REC_UNAVAILABLE_MESSAGE = 'Size recommendation temporarily unavailable'
 
+// MEDIUM #3 FIX: Per-store rate limiting to prevent abuse of free endpoint
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
+const RATE_LIMIT_MAX_REQUESTS = 100 // 100 requests per hour per store
+const storeRequestCounts = new Map<string, { count: number; resetAt: number }>()
+
+function checkRateLimit(storeId: string): boolean {
+  const now = Date.now()
+  const existing = storeRequestCounts.get(storeId)
+
+  if (!existing || now >= existing.resetAt) {
+    storeRequestCounts.set(storeId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return true
+  }
+
+  if (existing.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return false
+  }
+
+  existing.count += 1
+  return true
+}
+
+function cleanupRateLimitCache(): void {
+  const now = Date.now()
+  for (const [storeId, data] of storeRequestCounts.entries()) {
+    if (now >= data.resetAt) {
+      storeRequestCounts.delete(storeId)
+    }
+  }
+}
+
+// Cleanup rate limit cache every 5 minutes
+setInterval(cleanupRateLimitCache, 5 * 60 * 1000)
+
+// LOW #5 FIX: Hash worker URL to prevent infrastructure exposure in logs
+function hashWorkerUrl(url: string | null): string {
+  if (!url) return 'not_configured'
+  // Simple hash for logging - not cryptographic, just obfuscation
+  let hash = 0
+  for (let i = 0; i < url.length; i++) {
+    const char = url.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return `worker_${Math.abs(hash).toString(16)}`
+}
+
 function createSizeRecRequestSchema() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 
@@ -32,13 +79,39 @@ function createSizeRecRequestSchema() {
         },
         { message: 'image_url must be from trusted storage domain' }
       ),
-    height_cm: z.number().min(100).max(250),
+    height_cm: z.number().min(100).max(250).refine(
+      (val) => {
+        // MEDIUM #2 FIX: Prevent excessive floating-point precision
+        // Allow max 1 decimal place (e.g., 175.5)
+        // Check if val * 10 is an integer (meaning at most 1 decimal place)
+        return Number.isFinite(val) && Number.isInteger(val * 10)
+      },
+      { message: 'height_cm must have at most 1 decimal place' }
+    ),
   })
 }
 
+const ALLOWED_MEASUREMENT_KEYS = [
+  'chest_cm',
+  'waist_cm',
+  'hip_cm',
+  'shoulder_cm',
+  'inseam_cm',
+  'height_cm',
+] as const
+
 const sizeRecWorkerResponseSchema = z.object({
   recommended_size: z.string(),
-  measurements: z.record(z.number()),
+  measurements: z.record(z.number()).refine(
+    (measurements) => {
+      const keys = Object.keys(measurements)
+      // HIGH #1 FIX: Limit measurement object size to prevent DoS
+      if (keys.length > 20) return false
+      // Validate all keys are in allowed list
+      return keys.every((key) => ALLOWED_MEASUREMENT_KEYS.includes(key as any))
+    },
+    { message: 'Invalid or excessive measurement keys' }
+  ),
   confidence: z.number(),
   body_type: z.string().nullable(),
 })
@@ -93,9 +166,19 @@ export async function handleSizeRecPost(request: Request, context: B2BContext) {
     )
   }
 
+  // MEDIUM #3 FIX: Check per-store rate limit
+  if (!checkRateLimit(context.storeId)) {
+    log.warn({ store_id: context.storeId }, '[B2B Size Rec] Rate limit exceeded')
+    return errorResponse(
+      'RATE_LIMIT_EXCEEDED',
+      `Rate limit exceeded. Maximum ${RATE_LIMIT_MAX_REQUESTS} requests per hour.`,
+      429
+    )
+  }
+
   const workerApiUrl = resolveWorkerApiUrl()
   if (!workerApiUrl) {
-    log.error({ worker_url: null }, '[B2B Size Rec] WORKER_API_URL not configured')
+    log.error({ worker_id: hashWorkerUrl(null) }, '[B2B Size Rec] WORKER_API_URL not configured')
     return errorResponse('SERVICE_UNAVAILABLE', SIZE_REC_UNAVAILABLE_MESSAGE, 503)
   }
 
@@ -119,7 +202,7 @@ export async function handleSizeRecPost(request: Request, context: B2BContext) {
 
     const parsedWorkerResponse = sizeRecWorkerResponseSchema.safeParse(workerResponse.data)
     if (!parsedWorkerResponse.success) {
-      log.error({ worker_url: workerApiUrl }, '[B2B Size Rec] Invalid worker response payload')
+      log.error({ worker_id: hashWorkerUrl(workerApiUrl) }, '[B2B Size Rec] Invalid worker response payload')
       return errorResponse('SERVICE_UNAVAILABLE', SIZE_REC_UNAVAILABLE_MESSAGE, 503)
     }
 
@@ -127,7 +210,7 @@ export async function handleSizeRecPost(request: Request, context: B2BContext) {
     if (responseTimeMs > NFR2_TARGET_MS) {
       log.warn(
         {
-          worker_url: workerApiUrl,
+          worker_id: hashWorkerUrl(workerApiUrl),
           response_time_ms: responseTimeMs,
           nfr_target_ms: NFR2_TARGET_MS,
         },
@@ -135,20 +218,20 @@ export async function handleSizeRecPost(request: Request, context: B2BContext) {
       )
     }
 
+    // LOW #4 FIX: Removed timing headers to prevent ML model inference attacks
+    // Timing is still logged server-side for monitoring NFR2
     const response = successResponse({
       recommended_size: parsedWorkerResponse.data.recommended_size,
       measurements: parsedWorkerResponse.data.measurements,
       confidence: parsedWorkerResponse.data.confidence,
       body_type: parsedWorkerResponse.data.body_type,
     })
-    response.headers.set('X-Size-Rec-Latency-Ms', String(responseTimeMs))
-    response.headers.set('X-Size-Rec-Target-Ms', String(NFR2_TARGET_MS))
     return response
   } catch (err) {
     const responseTimeMs = Date.now() - startedAtMs
     log.error(
       {
-        worker_url: workerApiUrl,
+        worker_id: hashWorkerUrl(workerApiUrl),
         error_code: axios.isAxiosError(err) ? err.code : 'UNKNOWN',
         status: axios.isAxiosError(err) ? err.response?.status : null,
         response_time_ms: responseTimeMs,

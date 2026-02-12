@@ -49,6 +49,15 @@ so that **I can order the right size and avoid returns**.
 - [x] [AI-Review][MEDIUM] NFR2 remains observational only: requests exceeding 1s still return 200 success with warning logs, so the "<1s" requirement is measured but not actually enforced as an SLA gate. [apps/next/app/api/v1/size-rec/route.ts:106] **ACKNOWLEDGED**: NFR2 is a performance target for monitoring, not a hard SLA gate - graceful degradation is the correct behavior.
 - [x] [AI-Review][MEDIUM] Tests cover happy-path proxying and outages but do not assert rejection of non-store/untrusted `image_url` inputs, leaving the proxy trust-boundary regression path unguarded. [apps/next/__tests__/size-rec.route.test.ts:59] **FIXED 2026-02-13**: Added comprehensive SSRF prevention tests validating rejection of untrusted URLs and acceptance of trusted Supabase domains.
 - [x] [AI-Review][CRITICAL] Response fields use camelCase instead of snake_case, violating B2B REST API cross-language contract (architecture.md mandates snake_case for all JSON fields). **FIXED 2026-02-13**: All response fields now use snake_case (recommended_size, body_type).
+
+### Re-Review 2 Follow-ups (2026-02-13)
+
+- [x] [AI-Review][HIGH] Worker response can contain unbounded measurement data causing DoS: `measurements: z.record(z.number())` accepts arbitrary keys/values with no size limit, allowing massive objects (10,000+ keys) to consume excessive memory and crash server. [apps/next/app/api/v1/size-rec/route.ts:41] **FIXED 2026-02-13**: Added measurement key whitelist (6 allowed keys) and maximum 20 keys limit with refine validation.
+- [x] [AI-Review][MEDIUM] `height_cm` accepts dangerous floating-point edge cases: validation only checks range (100-250), not integer constraint or decimal precision limits, allowing values like 175.9999999999 that could cause floating-point calculation errors in worker or precision loss in database. [apps/next/app/api/v1/size-rec/route.ts:35] **FIXED 2026-02-13**: Added refine validation limiting height_cm to at most 1 decimal place using `Number.isInteger(val * 10)` check.
+- [x] [AI-Review][MEDIUM] No per-store rate limiting on free size-rec endpoint: only protected by B2B auth with no rate limit, allowing single compromised store API key to spam unlimited requests, overload worker service, and cause infrastructure costs without revenue. [apps/next/app/api/v1/size-rec/route.ts:75] **FIXED 2026-02-13**: Implemented in-memory per-store rate limiter with 100 requests/hour limit, automatic cache cleanup every 5 minutes.
+- [x] [AI-Review][LOW] Response timing headers enable ML model inference attacks: `X-Size-Rec-Latency-Ms` header exposes exact processing time, allowing attackers to infer model complexity, correlate timing with body types, and extract architecture details through timing side-channels. [apps/next/app/api/v1/size-rec/route.ts:144-145] **FIXED 2026-02-13**: Removed timing headers from client responses; timing still logged server-side for NFR2 monitoring.
+- [x] [AI-Review][LOW] Worker URL exposure in server logs: full worker URL logged in error conditions (lines 98, 122, 151), potentially exposing internal infrastructure topology if logs accessible to merchants through support tickets or log aggregation UIs. [apps/next/app/api/v1/size-rec/route.ts:98] **FIXED 2026-02-13**: Added `hashWorkerUrl()` function to hash worker URL before logging; all logs now use `worker_id` hash instead of full URL.
+
 ## Dev Notes
 
 ### Architecture Requirements
@@ -142,6 +151,14 @@ Codex (GPT-5)
   - Added comprehensive SSRF test coverage: Tests validate rejection of attacker.com, internal IPs (192.168.x.x), cloud metadata endpoints (169.254.x.x), and acceptance of trusted Supabase domains
   - Improved error handling: 4xx worker errors now correctly return 400 to client instead of 500
   - All 8 tests passing with enhanced security validation
+- ✅ **Third Review - SECURITY & DoS HARDENING (2026-02-13)**:
+  - Fixed HIGH DoS vulnerability: Worker response measurement validation now enforces whitelist (6 allowed keys: chest_cm, waist_cm, hip_cm, shoulder_cm, inseam_cm, height_cm) and maximum 20 keys limit to prevent memory exhaustion attacks
+  - Fixed MEDIUM floating-point precision issue: `height_cm` validation now limits to at most 1 decimal place using `Number.isInteger(val * 10)` check, preventing calculation errors and database precision loss
+  - Fixed MEDIUM abuse vector: Implemented per-store rate limiting (100 requests/hour) with in-memory cache and automatic cleanup to prevent infrastructure cost attacks via free endpoint
+  - Fixed LOW information disclosure: Removed `X-Size-Rec-Latency-Ms` and `X-Size-Rec-Target-Ms` response headers to prevent ML model inference attacks via timing side-channels; timing still logged server-side for NFR2 monitoring
+  - Fixed LOW infrastructure exposure: Worker URL now hashed via `hashWorkerUrl()` function before logging; all error logs use `worker_id` hash instead of exposing full internal URL
+  - Added 5 new security tests: measurement DoS prevention (2 tests), height precision validation (2 tests), rate limiting enforcement (1 test)
+  - All 12 tests passing with comprehensive security coverage
 ### File List
 
 - `apps/next/app/api/v1/size-rec/route.ts` (modified)
@@ -161,3 +178,4 @@ Codex (GPT-5)
 | Added hard-guard no-credit test strategy and cross-endpoint degradation test | Strengthen proof that size-rec remains free and failures do not impact generation pipeline |
 | 2026-02-12 re-review | Added unresolved findings for untrusted `image_url` forwarding risk, non-enforced NFR2 SLA, and missing tests for URL trust-boundary rejection |
 | 2026-02-13 CRITICAL security fixes | Fixed SSRF vulnerability with domain validation, fixed snake_case contract violation in responses, improved 4xx error handling, added comprehensive SSRF prevention tests - ALL HIGH/CRITICAL findings resolved |
+| 2026-02-13 Third review - Security hardening | Fixed DoS vulnerability (measurement validation with whitelist + 20-key limit), fixed floating-point precision issues (1 decimal max for height_cm), implemented per-store rate limiting (100 req/hour), removed timing headers (ML inference attack prevention), hashed worker URLs in logs (infrastructure exposure mitigation), added 5 new security tests - all 12 tests passing |

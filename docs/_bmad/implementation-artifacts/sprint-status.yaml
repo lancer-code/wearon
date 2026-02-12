@@ -63,9 +63,9 @@ development_status:
   # Epic 4: Shopify Plugin Storefront & Virtual Try-On
   epic-4: in-progress
   4-1-b2b-generation-rest-api-endpoints: review
-  4-2-plugin-theme-app-extension-core: ready-for-dev
-  4-3-try-on-experience-privacy: ready-for-dev
-  4-4-plugin-accessibility: ready-for-dev
+  4-2-plugin-theme-app-extension-core: review
+  4-3-try-on-experience-privacy: review
+  4-4-plugin-accessibility: review
   epic-4-retrospective: optional
 
   # Epic 5: Size Recommendation

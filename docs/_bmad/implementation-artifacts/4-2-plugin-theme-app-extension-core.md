@@ -1,6 +1,6 @@
 # Story 4.2: Plugin Theme App Extension Core (wearon-shopify)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -20,27 +20,27 @@ so that **I can access virtual try-on naturally as part of my shopping experienc
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create theme app extension scaffold
-  - [ ] 1.1 In wearon-shopify repo, create theme app extension under `extensions/wearon-tryon/`.
-  - [ ] 1.2 Define app embed block in `blocks/tryon-block.liquid` — renders on product pages.
-  - [ ] 1.3 Create `assets/tryon-widget.js` — main entry point using Preact or vanilla JS.
+- [x] Task 1: Create theme app extension scaffold
+  - [x] 1.1 In wearon-shopify repo, create theme app extension under `extensions/wearon-tryon/`.
+  - [x] 1.2 Define app embed block in `blocks/tryon-block.liquid` — renders on product pages.
+  - [x] 1.3 Create `assets/tryon-widget.js` — main entry point using Preact or vanilla JS.
 
-- [ ] Task 2: Implement sandboxed UI (AC: #2)
-  - [ ] 2.1 Use Shadow DOM for CSS isolation — all widget styles scoped inside shadow root.
-  - [ ] 2.2 Create minimal try-on button with loading state.
-  - [ ] 2.3 Ensure no CSS leaks into or from the host store page.
+- [x] Task 2: Implement sandboxed UI (AC: #2)
+  - [x] 2.1 Use Shadow DOM for CSS isolation — all widget styles scoped inside shadow root.
+  - [x] 2.2 Create minimal try-on button with loading state.
+  - [x] 2.3 Ensure no CSS leaks into or from the host store page.
 
-- [ ] Task 3: "Powered by WearOn" badge (AC: #3)
-  - [ ] 3.1 Add "Powered by WearOn" badge to the widget footer.
+- [x] Task 3: "Powered by WearOn" badge (AC: #3)
+  - [x] 3.1 Add "Powered by WearOn" badge to the widget footer.
 
-- [ ] Task 4: Bundle optimization (AC: #4)
-  - [ ] 4.1 Use Preact (3KB) or vanilla JS — no React.
-  - [ ] 4.2 Target <50KB gzipped total bundle.
-  - [ ] 4.3 Test loading time on simulated 3G connection.
+- [x] Task 4: Bundle optimization (AC: #4)
+  - [x] 4.1 Use Preact (3KB) or vanilla JS — no React.
+  - [x] 4.2 Target <50KB gzipped total bundle.
+  - [x] 4.3 Test loading time on simulated 3G connection.
 
-- [ ] Task 5: Write tests (AC: #1-4)
-  - [ ] 5.1 Test widget renders inside shadow DOM.
-  - [ ] 5.2 Test bundle size is under 50KB gzipped.
+- [x] Task 5: Write tests (AC: #1-4)
+  - [x] 5.1 Test widget renders inside shadow DOM.
+  - [x] 5.2 Test bundle size is under 50KB gzipped.
 
 ## Dev Notes
 
@@ -74,10 +74,40 @@ so that **I can access virtual try-on naturally as part of my shopping experienc
 
 ### Agent Model Used
 
-(to be filled by dev agent)
+Codex (GPT-5)
 
 ### Debug Log References
 
+- Created nested `wearon-shopify/` repository and initialized with `git init`
+- Red phase: `node ../node_modules/vitest/vitest.mjs run` failed due missing `tryon-widget.js`
+- Green phase: implemented widget + block scaffold and reran tests
+- Validation: `node ../node_modules/vitest/vitest.mjs run` passed (`5/5` tests)
 ### Completion Notes List
 
+- Implemented Shopify theme app extension scaffold under `wearon-shopify/extensions/wearon-tryon/`
+- Added `blocks/tryon-block.liquid` to render try-on host element on product pages and load widget asset
+- Built `assets/tryon-widget.js` using vanilla JS (no React) with:
+  - Shadow DOM rendering for CSS isolation
+  - Minimal try-on button with loading state
+  - Footer badge: `Powered by WearOn`
+  - Auto-initialization for all `[data-wearon-tryon]` hosts
+- Added tests for:
+  - Shadow DOM widget render
+  - Powered-by badge + loading-state behavior
+  - Multi-host initialization
+  - Gzipped bundle size budget `< 50KB`
+  - Simulated constrained 3G transfer estimate `< 2s`
 ### File List
+
+- `wearon-shopify/package.json` (created)
+- `wearon-shopify/extensions/wearon-tryon/blocks/tryon-block.liquid` (created)
+- `wearon-shopify/extensions/wearon-tryon/assets/tryon-widget.js` (created)
+- `wearon-shopify/__tests__/tryon-widget.test.js` (created)
+
+### Change Log
+
+| Change | Reason |
+|--------|--------|
+| Added `wearon-shopify/` nested git repo | Story explicitly targets plugin implementation in separate Shopify repo |
+| Implemented theme app extension block and widget in vanilla JS | Meet AC #1/#2 and bundle-size constraints without React |
+| Added bundle-size + constrained-3G timing tests | Enforce AC #4 performance requirement during development |

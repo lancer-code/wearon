@@ -230,4 +230,83 @@ describe('stores config route', () => {
       shopDomain: 'store.myshopify.com',
     })
   })
+
+  it('PATCH rejects resell mode when retail_credit_price is missing or invalid', async () => {
+    const invalidPayloads = [
+      { billing_mode: 'resell_mode' },
+      { billing_mode: 'resell_mode', retail_credit_price: 0 },
+      { billing_mode: 'resell_mode', retail_credit_price: -1 },
+    ]
+
+    for (const body of invalidPayloads) {
+      const request = new Request('http://localhost/api/v1/stores/config', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+
+      const response = await handlePatchStoreConfig(request, testContext)
+      const payload = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(payload.error).toEqual({
+        code: 'VALIDATION_ERROR',
+        message: 'retail_credit_price must be a positive number when billing_mode is resell_mode',
+      })
+    }
+
+    expect(mockSelectSingle).not.toHaveBeenCalled()
+    expect(mockEnsureHiddenTryOnCreditProduct).not.toHaveBeenCalled()
+    expect(mockUpdatePayload).not.toHaveBeenCalled()
+  })
+
+  it('PATCH switches to absorb mode without touching shopper credits', async () => {
+    mockSelectSingle.mockResolvedValueOnce({
+      data: {
+        id: 'store_123',
+        shop_domain: 'store.myshopify.com',
+        billing_mode: 'resell_mode',
+        retail_credit_price: 0.75,
+        shopify_product_id: '111222333',
+        shopify_variant_id: '444555666',
+        subscription_tier: 'starter',
+        status: 'active',
+        access_token_encrypted: 'enc-token',
+      },
+      error: null,
+    })
+
+    mockUpdateSingle.mockResolvedValueOnce({
+      data: {
+        id: 'store_123',
+        shop_domain: 'store.myshopify.com',
+        billing_mode: 'absorb_mode',
+        retail_credit_price: null,
+        shopify_product_id: '111222333',
+        shopify_variant_id: '444555666',
+        subscription_tier: 'starter',
+        status: 'active',
+      },
+      error: null,
+    })
+
+    const request = new Request('http://localhost/api/v1/stores/config', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        billing_mode: 'absorb_mode',
+      }),
+    })
+
+    const response = await handlePatchStoreConfig(request, testContext)
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(mockEnsureHiddenTryOnCreditProduct).not.toHaveBeenCalled()
+    expect(mockUpdatePayload).toHaveBeenCalledWith({
+      billing_mode: 'absorb_mode',
+      retail_credit_price: null,
+      shopify_product_id: '111222333',
+      shopify_variant_id: '444555666',
+    })
+    expect(payload.data.billing_mode).toBe('absorb_mode')
+  })
 })

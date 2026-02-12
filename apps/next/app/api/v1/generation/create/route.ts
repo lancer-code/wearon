@@ -1,17 +1,26 @@
 import crypto from 'node:crypto'
-import { withB2BAuth } from '../../../../../../packages/api/src/middleware/b2b'
-import { createChildLogger } from '../../../../../../packages/api/src/logger'
+import { withB2BAuth } from '../../../../../../../packages/api/src/middleware/b2b'
+import { createChildLogger } from '../../../../../../../packages/api/src/logger'
 import {
   deductStoreCredit,
+  deductStoreShopperCredit,
   getStoreBillingProfile,
   logStoreOverage,
   refundStoreCredit,
-} from '../../../../../../packages/api/src/services/b2b-credits'
-import { createOverageCharge, getTierOverageCents } from '../../../../../../packages/api/src/services/paddle'
-import { pushGenerationTask } from '../../../../../../packages/api/src/services/redis-queue'
-import { successResponse, errorResponse } from '../../../../../../packages/api/src/utils/b2b-response'
-import { TASK_PAYLOAD_VERSION } from '../../../../../../packages/api/src/types/queue'
-import type { GenerationTaskPayload } from '../../../../../../packages/api/src/types/queue'
+  refundStoreShopperCredit,
+} from '../../../../../../../packages/api/src/services/b2b-credits'
+import {
+  createOverageCharge,
+  getTierOverageCents,
+} from '../../../../../../../packages/api/src/services/paddle'
+import { pushGenerationTask } from '../../../../../../../packages/api/src/services/redis-queue'
+import { getStoreUploadPath } from '../../../../../../../packages/api/src/services/b2b-storage'
+import {
+  successResponse,
+  errorResponse,
+} from '../../../../../../../packages/api/src/utils/b2b-response'
+import { TASK_PAYLOAD_VERSION } from '../../../../../../../packages/api/src/types/queue'
+import type { GenerationTaskPayload } from '../../../../../../../packages/api/src/types/queue'
 import { createClient } from '@supabase/supabase-js'
 
 const DEFAULT_B2B_PROMPT = `Virtual try-on: Using the provided images:
@@ -44,7 +53,59 @@ function getServiceClient() {
   return serviceClient
 }
 
-export const POST = withB2BAuth(async (request, context) => {
+function canDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function isStoreScopedUploadUrl(imageUrl: string, storeId: string): boolean {
+  const expectedPrefix = `${getStoreUploadPath(storeId)}/`
+  const candidates = [imageUrl, canDecode(imageUrl)]
+
+  try {
+    const parsed = new URL(imageUrl)
+    candidates.push(parsed.pathname)
+    candidates.push(canDecode(parsed.pathname))
+    for (const paramValue of parsed.searchParams.values()) {
+      candidates.push(paramValue)
+      candidates.push(canDecode(paramValue))
+    }
+  } catch {
+    // Non-URL inputs are still checked via the raw/decoded candidates above.
+  }
+
+  return candidates.some((candidate) => candidate.includes(expectedPrefix))
+}
+
+function extractShopperEmail(request: Request): string | null {
+  const raw = request.headers.get('x-shopper-email')
+  if (!raw) {
+    return null
+  }
+
+  const normalized = raw.trim().toLowerCase()
+  if (!normalized) {
+    return null
+  }
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailPattern.test(normalized)) {
+    return null
+  }
+
+  return normalized
+}
+
+export async function handleGenerationCreatePost(
+  request: Request,
+  context: {
+    storeId: string
+    requestId: string
+  }
+) {
   const log = createChildLogger(context.requestId)
 
   // Parse and validate input
@@ -73,38 +134,89 @@ export const POST = withB2BAuth(async (request, context) => {
     if (typeof url !== 'string') {
       return errorResponse('VALIDATION_ERROR', 'Each image_urls entry must be a string URL', 400)
     }
+
+    if (!isStoreScopedUploadUrl(url, context.storeId)) {
+      return errorResponse(
+        'VALIDATION_ERROR',
+        `image_urls must use store-scoped paths under ${getStoreUploadPath(context.storeId)}/`,
+        400
+      )
+    }
   }
 
-  const resolvedPrompt = typeof prompt === 'string' && prompt.trim() ? prompt.trim() : DEFAULT_B2B_PROMPT
+  const resolvedPrompt =
+    typeof prompt === 'string' && prompt.trim() ? prompt.trim() : DEFAULT_B2B_PROMPT
 
-  // Deduct 1 credit
+  const supabase = getServiceClient()
+  const { data: storeConfig, error: storeConfigError } = await supabase
+    .from('stores')
+    .select('billing_mode')
+    .eq('id', context.storeId)
+    .single()
+
+  if (storeConfigError || !storeConfig) {
+    log.error({ err: storeConfigError?.message, storeId: context.storeId }, '[B2B Generation] Store load failed')
+    return errorResponse('NOT_FOUND', 'Store configuration not found', 404)
+  }
+
+  const billingMode = storeConfig.billing_mode === 'resell_mode' ? 'resell_mode' : 'absorb_mode'
+  const shopperEmail = extractShopperEmail(request)
+  if (billingMode === 'resell_mode' && !shopperEmail) {
+    return errorResponse('VALIDATION_ERROR', 'x-shopper-email header is required for resell mode', 400)
+  }
+
+  // Deduct 1 credit (store-level for absorb mode, shopper-level for resell mode)
   let creditDeducted = false
-  let overagePlan:
-    | {
-        subscriptionId: string
-        tier: 'starter' | 'growth' | 'scale'
-      }
-    | null = null
+  let shopperCreditDeducted = false
+  let overagePlan: {
+    subscriptionId: string
+    tier: 'starter' | 'growth' | 'scale'
+  } | null = null
   let overageChargeId: string | null = null
 
   try {
-    const success = await deductStoreCredit(context.storeId, context.requestId, 'B2B generation')
-    if (success) {
-      creditDeducted = true
-    } else {
-      const billingProfile = await getStoreBillingProfile(context.storeId)
-      const hasActiveSubscription =
-        billingProfile.subscriptionStatus === null ||
-        billingProfile.subscriptionStatus === 'active' ||
-        billingProfile.subscriptionStatus === 'trialing'
-
-      if (billingProfile.subscriptionTier && billingProfile.subscriptionId && hasActiveSubscription) {
-        overagePlan = {
-          subscriptionId: billingProfile.subscriptionId,
-          tier: billingProfile.subscriptionTier,
-        }
+    if (billingMode === 'resell_mode') {
+      const success = await deductStoreShopperCredit(
+        context.storeId,
+        shopperEmail as string,
+        context.requestId,
+        'B2B shopper generation'
+      )
+      if (success) {
+        shopperCreditDeducted = true
       } else {
-        return errorResponse('INSUFFICIENT_CREDITS', 'Insufficient credits to create generation', 402)
+        return errorResponse(
+          'INSUFFICIENT_CREDITS',
+          'Insufficient shopper credits to create generation',
+          402
+        )
+      }
+    } else {
+      const success = await deductStoreCredit(context.storeId, context.requestId, 'B2B generation')
+      if (success) {
+        creditDeducted = true
+      } else {
+        const billingProfile = await getStoreBillingProfile(context.storeId)
+        const hasActiveSubscription =
+          billingProfile.subscriptionStatus === 'active' ||
+          billingProfile.subscriptionStatus === 'trialing'
+
+        if (
+          billingProfile.subscriptionTier &&
+          billingProfile.subscriptionId &&
+          hasActiveSubscription
+        ) {
+          overagePlan = {
+            subscriptionId: billingProfile.subscriptionId,
+            tier: billingProfile.subscriptionTier,
+          }
+        } else {
+          return errorResponse(
+            'INSUFFICIENT_CREDITS',
+            'Insufficient credits to create generation',
+            402
+          )
+        }
       }
     }
   } catch (err) {
@@ -113,11 +225,11 @@ export const POST = withB2BAuth(async (request, context) => {
   }
 
   // Create store_generation_sessions record
-  const supabase = getServiceClient()
   const { data: session, error: sessionError } = await supabase
     .from('store_generation_sessions')
     .insert({
       store_id: context.storeId,
+      shopper_email: shopperEmail,
       status: 'queued',
       model_image_url: image_urls[0] as string,
       outfit_image_url: (image_urls[1] as string) ?? null,
@@ -131,9 +243,24 @@ export const POST = withB2BAuth(async (request, context) => {
   if (sessionError || !session) {
     log.error({ err: sessionError?.message }, '[B2B Generation] Session creation failed')
     // Refund credit on session creation failure
-    if (creditDeducted) {
+    if (shopperCreditDeducted) {
       try {
-        await refundStoreCredit(context.storeId, context.requestId, 'Session creation failed - refund')
+        await refundStoreShopperCredit(
+          context.storeId,
+          shopperEmail as string,
+          context.requestId,
+          'Session creation failed - shopper refund'
+        )
+      } catch (refundErr) {
+        log.error({ err: refundErr }, '[B2B Generation] Shopper refund after session failure also failed')
+      }
+    } else if (creditDeducted) {
+      try {
+        await refundStoreCredit(
+          context.storeId,
+          context.requestId,
+          'Session creation failed - refund'
+        )
       } catch (refundErr) {
         log.error({ err: refundErr }, '[B2B Generation] Refund after session failure also failed')
       }
@@ -151,25 +278,35 @@ export const POST = withB2BAuth(async (request, context) => {
         sessionId: session.id as string,
         requestId: context.requestId,
       })
-
-      const overageCents = getTierOverageCents(overagePlan.tier)
-      await logStoreOverage(
-        context.storeId,
-        context.requestId,
-        `Overage charge (${overagePlan.tier}) billed at ${overageCents} cents via Paddle charge ${overageChargeId}`,
-      )
     } catch (overageErr) {
       log.error(
         { err: overageErr, storeId: context.storeId, sessionId: session.id },
-        '[B2B Generation] Overage billing failed',
+        '[B2B Generation] Overage billing failed'
       )
 
       await supabase
         .from('store_generation_sessions')
-        .update({ status: 'failed', error_message: 'Failed to bill overage for generation request' })
+        .update({
+          status: 'failed',
+          error_message: 'Failed to bill overage for generation request',
+        })
         .eq('id', session.id)
 
       return errorResponse('SERVICE_UNAVAILABLE', 'Overage billing temporarily unavailable', 503)
+    }
+
+    const overageCents = getTierOverageCents(overagePlan.tier)
+    try {
+      await logStoreOverage(
+        context.storeId,
+        context.requestId,
+        `Overage charge (${overagePlan.tier}) billed at ${overageCents} cents via Paddle charge ${overageChargeId}`
+      )
+    } catch (overageLogErr) {
+      log.warn(
+        { err: overageLogErr, overageChargeId, sessionId: session.id, storeId: context.storeId },
+        '[B2B Generation] Overage charge succeeded but transaction logging failed'
+      )
     }
   }
 
@@ -192,7 +329,18 @@ export const POST = withB2BAuth(async (request, context) => {
     log.error({ err: queueErr }, '[B2B Generation] Queue push failed')
 
     // Refund credit and mark session failed
-    if (creditDeducted) {
+    if (shopperCreditDeducted) {
+      try {
+        await refundStoreShopperCredit(
+          context.storeId,
+          shopperEmail as string,
+          context.requestId,
+          'Queue failure - shopper refund'
+        )
+      } catch (refundErr) {
+        log.error({ err: refundErr }, '[B2B Generation] Shopper refund after queue failure also failed')
+      }
+    } else if (creditDeducted) {
       try {
         await refundStoreCredit(context.storeId, context.requestId, 'Queue failure - refund')
       } catch (refundErr) {
@@ -201,7 +349,7 @@ export const POST = withB2BAuth(async (request, context) => {
     } else if (overageChargeId) {
       log.warn(
         { overageChargeId, sessionId: session.id },
-        '[B2B Generation] Queue failed after overage charge. Manual reconciliation may be required',
+        '[B2B Generation] Queue failed after overage charge. Manual reconciliation may be required'
       )
     }
 
@@ -215,11 +363,10 @@ export const POST = withB2BAuth(async (request, context) => {
 
   log.info(
     { storeId: context.storeId, sessionId: session.id },
-    '[B2B Generation] Task queued successfully',
+    '[B2B Generation] Task queued successfully'
   )
 
-  return successResponse(
-    { sessionId: session.id, status: 'queued' },
-    201,
-  )
-})
+  return successResponse({ sessionId: session.id, status: 'queued' }, 201)
+}
+
+export const POST = withB2BAuth(handleGenerationCreatePost)

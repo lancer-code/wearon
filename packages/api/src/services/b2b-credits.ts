@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import crypto from 'node:crypto'
 import { logger } from '../logger'
 import type { SubscriptionTier } from './paddle'
 
@@ -19,6 +20,22 @@ function getServiceClient(): SupabaseClient {
   return serviceClient
 }
 
+function isMissingDatabaseObject(message: string | undefined, objectName: string): boolean {
+  if (!message) {
+    return false
+  }
+  const lowered = message.toLowerCase()
+  return lowered.includes(objectName.toLowerCase()) && lowered.includes('does not exist')
+}
+
+function normalizeShopperEmail(input: string): string {
+  return input.trim().toLowerCase()
+}
+
+function hashShopperEmail(shopperEmail: string): string {
+  return crypto.createHash('sha256').update(normalizeShopperEmail(shopperEmail)).digest('hex')
+}
+
 /**
  * Atomically deduct 1 credit from a store's balance.
  * Returns true if deduction succeeded, false if insufficient balance.
@@ -26,7 +43,7 @@ function getServiceClient(): SupabaseClient {
 export async function deductStoreCredit(
   storeId: string,
   requestId: string,
-  description = 'Generation credit deduction',
+  description = 'Generation credit deduction'
 ): Promise<boolean> {
   const supabase = getServiceClient()
 
@@ -51,7 +68,7 @@ export async function deductStoreCredit(
 export async function refundStoreCredit(
   storeId: string,
   requestId: string,
-  description = 'Generation failed - refund',
+  description = 'Generation failed - refund'
 ): Promise<void> {
   const supabase = getServiceClient()
 
@@ -69,10 +86,81 @@ export async function refundStoreCredit(
 }
 
 /**
+ * Atomically deduct 1 credit from a shopper's balance for resell mode.
+ * Returns true if deduction succeeded, false if shopper has no credits.
+ */
+export async function deductStoreShopperCredit(
+  storeId: string,
+  shopperEmail: string,
+  requestId: string,
+  description = 'B2B shopper generation'
+): Promise<boolean> {
+  const supabase = getServiceClient()
+  const normalizedShopperEmail = normalizeShopperEmail(shopperEmail)
+
+  const { data, error } = await supabase.rpc('deduct_store_shopper_credits', {
+    p_store_id: storeId,
+    p_shopper_email: normalizedShopperEmail,
+    p_amount: 1,
+    p_request_id: requestId,
+    p_description: description,
+  })
+
+  if (error) {
+    logger.error(
+      {
+        storeId,
+        requestId,
+        shopperEmailHash: hashShopperEmail(normalizedShopperEmail),
+        err: error.message,
+      },
+      '[B2B Credits] Shopper deduction RPC failed'
+    )
+    throw new Error(`Shopper credit deduction failed: ${error.message}`)
+  }
+
+  return data as boolean
+}
+
+/**
+ * Refund 1 credit to a shopper's balance (resell mode queue/session failure).
+ */
+export async function refundStoreShopperCredit(
+  storeId: string,
+  shopperEmail: string,
+  requestId: string,
+  description = 'B2B shopper generation failed - refund'
+): Promise<void> {
+  const supabase = getServiceClient()
+  const normalizedShopperEmail = normalizeShopperEmail(shopperEmail)
+
+  const { error } = await supabase.rpc('refund_store_shopper_credits', {
+    p_store_id: storeId,
+    p_shopper_email: normalizedShopperEmail,
+    p_amount: 1,
+    p_request_id: requestId,
+    p_description: description,
+  })
+
+  if (error) {
+    logger.error(
+      {
+        storeId,
+        requestId,
+        shopperEmailHash: hashShopperEmail(normalizedShopperEmail),
+        err: error.message,
+      },
+      '[B2B Credits] Shopper refund RPC failed'
+    )
+    throw new Error(`Shopper credit refund failed: ${error.message}`)
+  }
+}
+
+/**
  * Get the current credit balance for a store.
  */
 export async function getStoreBalance(
-  storeId: string,
+  storeId: string
 ): Promise<{ balance: number; totalPurchased: number; totalSpent: number }> {
   const supabase = getServiceClient()
 
@@ -84,7 +172,51 @@ export async function getStoreBalance(
 
   if (error || !data) {
     logger.error({ storeId, err: error?.message }, '[B2B Credits] Balance query failed')
-    return { balance: 0, totalPurchased: 0, totalSpent: 0 }
+    throw new Error(`Store balance query failed: ${error?.message ?? 'No store_credits row found'}`)
+  }
+
+  return {
+    balance: data.balance as number,
+    totalPurchased: data.total_purchased as number,
+    totalSpent: data.total_spent as number,
+  }
+}
+
+/**
+ * Returns shopper-level credits for a specific store. Missing rows resolve to zero balance.
+ */
+export async function getStoreShopperBalance(
+  storeId: string,
+  shopperEmail: string
+): Promise<{ balance: number; totalPurchased: number; totalSpent: number }> {
+  const supabase = getServiceClient()
+  const normalizedShopperEmail = normalizeShopperEmail(shopperEmail)
+
+  const { data, error } = await supabase
+    .from('store_shopper_credits')
+    .select('balance, total_purchased, total_spent')
+    .eq('store_id', storeId)
+    .eq('shopper_email', normalizedShopperEmail)
+    .maybeSingle()
+
+  if (error) {
+    logger.error(
+      {
+        storeId,
+        shopperEmailHash: hashShopperEmail(normalizedShopperEmail),
+        err: error.message,
+      },
+      '[B2B Credits] Shopper balance query failed'
+    )
+    throw new Error(`Shopper balance query failed: ${error.message}`)
+  }
+
+  if (!data) {
+    return {
+      balance: 0,
+      totalPurchased: 0,
+      totalSpent: 0,
+    }
   }
 
   return {
@@ -102,7 +234,7 @@ export async function addStoreCredits(
   amount: number,
   type: 'purchase' | 'subscription',
   requestId: string,
-  description: string,
+  description: string
 ): Promise<void> {
   const supabase = getServiceClient()
 
@@ -115,7 +247,15 @@ export async function addStoreCredits(
   })
 
   if (error) {
-    logger.error({ storeId, amount, type, requestId, err: error.message }, '[B2B Credits] Add RPC failed')
+    logger.error(
+      { storeId, amount, type, requestId, err: error.message },
+      '[B2B Credits] Add RPC failed'
+    )
+    if (isMissingDatabaseObject(error.message, 'add_store_credits')) {
+      throw new Error(
+        'Add store credits requires migration 008_paddle_billing_schema.sql to be applied'
+      )
+    }
     throw new Error(`Add store credits failed: ${error.message}`)
   }
 }
@@ -127,7 +267,7 @@ export async function logStoreOverage(
   storeId: string,
   requestId: string,
   description: string,
-  amount = 1,
+  amount = 1
 ): Promise<void> {
   const supabase = getServiceClient()
 
@@ -140,7 +280,10 @@ export async function logStoreOverage(
   })
 
   if (error) {
-    logger.error({ storeId, requestId, err: error.message }, '[B2B Credits] Overage log insert failed')
+    logger.error(
+      { storeId, requestId, err: error.message },
+      '[B2B Credits] Overage log insert failed'
+    )
     throw new Error(`Failed to log overage transaction: ${error.message}`)
   }
 }
@@ -157,7 +300,7 @@ export async function getStoreBillingProfile(storeId: string): Promise<{
 
   const { data, error } = await supabase
     .from('stores')
-    .select('subscription_tier, subscription_id, subscription_status')
+    .select('subscription_tier, subscription_id')
     .eq('id', storeId)
     .single()
 
@@ -174,9 +317,25 @@ export async function getStoreBillingProfile(storeId: string): Promise<{
   const subscriptionTier =
     rawTier === 'starter' || rawTier === 'growth' || rawTier === 'scale' ? rawTier : null
 
+  let subscriptionStatus: string | null = null
+  const { data: statusData, error: statusError } = await supabase
+    .from('stores')
+    .select('subscription_status')
+    .eq('id', storeId)
+    .single()
+
+  if (!statusError && statusData) {
+    subscriptionStatus = (statusData.subscription_status as string | null) ?? null
+  } else if (!isMissingDatabaseObject(statusError?.message, 'subscription_status')) {
+    logger.error(
+      { storeId, err: statusError?.message },
+      '[B2B Credits] subscription_status query failed'
+    )
+  }
+
   return {
     subscriptionTier,
     subscriptionId: (data.subscription_id as string | null) ?? null,
-    subscriptionStatus: (data.subscription_status as string | null) ?? null,
+    subscriptionStatus,
   }
 }

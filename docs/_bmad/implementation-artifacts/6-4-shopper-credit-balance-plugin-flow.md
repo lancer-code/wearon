@@ -1,6 +1,6 @@
 # Story 6.4: Shopper Credit Balance & Plugin Flow (wearon-shopify)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,33 +18,33 @@ so that **I can pay for the try-on experience through the store's checkout**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Shopper credit balance API endpoint (AC: #3)
-  - [ ] 1.1 Create route `apps/next/app/api/v1/credits/shopper/route.ts`.
-  - [ ] 1.2 Use `withB2BAuth` middleware. Shopper email passed from server-side proxy (Shopify customer context).
-  - [ ] 1.3 Query `store_shopper_credits` WHERE `store_id = context.storeId AND shopper_email = email`.
-  - [ ] 1.4 Return `{ data: { balance, total_purchased, total_spent }, error: null }`.
-  - [ ] 1.5 Return balance of 0 if no record exists (new shopper).
+- [x] Task 1: Shopper credit balance API endpoint (AC: #3)
+  - [x] 1.1 Create route `apps/next/app/api/v1/credits/shopper/route.ts`.
+  - [x] 1.2 Use `withB2BAuth` middleware. Shopper email passed from server-side proxy (Shopify customer context).
+  - [x] 1.3 Query `store_shopper_credits` WHERE `store_id = context.storeId AND shopper_email = email`.
+  - [x] 1.4 Return `{ data: { balance, total_purchased, total_spent }, error: null }`.
+  - [x] 1.5 Return balance of 0 if no record exists (new shopper).
 
-- [ ] Task 2: Resell mode plugin flow — wearon-shopify (AC: #1, #2)
-  - [ ] 2.1 In theme app extension, check store config for `billing_mode === 'resell_mode'`.
-  - [ ] 2.2 If resell mode: require Shopify customer login before try-on (server-side proxy resolves email).
-  - [ ] 2.3 Check shopper credit balance via server-side proxy → WearOn API.
-  - [ ] 2.4 If balance === 0: show credit purchase UI with retail pricing and Shopify cart link.
-  - [ ] 2.5 If balance > 0: enable try-on button, show remaining credits.
-  - [ ] 2.6 After checkout (new tab), poll balance endpoint until credits appear (5s interval, 60s timeout).
+- [x] Task 2: Resell mode plugin flow — wearon-shopify (AC: #1, #2)
+  - [x] 2.1 In theme app extension, check store config for `billing_mode === 'resell_mode'`.
+  - [x] 2.2 If resell mode: require Shopify customer login before try-on (server-side proxy resolves email).
+  - [x] 2.3 Check shopper credit balance via server-side proxy → WearOn API.
+  - [x] 2.4 If balance === 0: show credit purchase UI with retail pricing and Shopify cart link.
+  - [x] 2.5 If balance > 0: enable try-on button, show remaining credits.
+  - [x] 2.6 After checkout (new tab), poll balance endpoint until credits appear (5s interval, 60s timeout).
 
-- [ ] Task 3: Shopper credit deduction for resell mode generation (AC: #3)
-  - [ ] 3.1 Extend `POST /api/v1/generation/create` to check `billing_mode`.
-  - [ ] 3.2 If `resell_mode`: deduct from `store_shopper_credits` (not `store_credits`).
-  - [ ] 3.3 If `absorb_mode`: deduct from `store_credits` (existing behavior from Story 4.1).
-  - [ ] 3.4 Create corresponding transaction records.
+- [x] Task 3: Shopper credit deduction for resell mode generation (AC: #3)
+  - [x] 3.1 Extend `POST /api/v1/generation/create` to check `billing_mode`.
+  - [x] 3.2 If `resell_mode`: deduct from `store_shopper_credits` (not `store_credits`).
+  - [x] 3.3 If `absorb_mode`: deduct from `store_credits` (existing behavior from Story 4.1).
+  - [x] 3.4 Create corresponding transaction records.
 
-- [ ] Task 4: Write tests (AC: #1-3)
-  - [ ] 4.1 Test shopper balance endpoint returns correct balance.
-  - [ ] 4.2 Test new shopper returns 0 balance.
-  - [ ] 4.3 Test resell mode generation deducts from shopper credits.
-  - [ ] 4.4 Test absorb mode generation deducts from store credits.
-  - [ ] 4.5 Test insufficient shopper credits returns 402.
+- [x] Task 4: Write tests (AC: #1-3)
+  - [x] 4.1 Test shopper balance endpoint returns correct balance.
+  - [x] 4.2 Test new shopper returns 0 balance.
+  - [x] 4.3 Test resell mode generation deducts from shopper credits.
+  - [x] 4.4 Test absorb mode generation deducts from store credits.
+  - [x] 4.5 Test insufficient shopper credits returns 402.
 
 ## Dev Notes
 
@@ -92,10 +92,38 @@ so that **I can pay for the try-on experience through the store's checkout**.
 
 ### Agent Model Used
 
-(to be filled by dev agent)
+Codex GPT-5
 
 ### Debug Log References
 
+- `yarn vitest run apps/next/__tests__/shopper-balance.route.test.ts apps/next/__tests__/b2b-generation.route.test.ts packages/api/__tests__/services/b2b-credits.test.ts`
+- `node node_modules/vitest/vitest.mjs run wearon-shopify/__tests__/tryon-widget.test.js wearon-shopify/__tests__/tryon-privacy-flow.test.js`
+
 ### Completion Notes List
 
+- Added shopper credit balance endpoint at `GET /api/v1/credits/shopper` with `x-shopper-email` validation and zero-balance fallback.
+- Extended generation create flow to branch by `stores.billing_mode`:
+  - `absorb_mode` uses store-level credit deduction (existing behavior)
+  - `resell_mode` uses shopper-level credit deduction and refund handling.
+- Added shopper-level credit RPC migration `013_store_shopper_credit_rpc.sql`:
+  - `deduct_store_shopper_credits`
+  - `refund_store_shopper_credits`
+- Added storefront utility flow for shopper credits in `wearon-shopify`:
+  - read shopper balance
+  - poll for post-checkout balance updates
+  - construct/open Shopify cart links.
+- Updated try-on widget flow for resell mode: credit-aware CTA, purchase button, balance text, and checkout polling behavior.
+
 ### File List
+
+- `apps/next/app/api/v1/credits/shopper/route.ts`
+- `apps/next/app/api/v1/generation/create/route.ts`
+- `apps/next/__tests__/shopper-balance.route.test.ts`
+- `apps/next/__tests__/b2b-generation.route.test.ts`
+- `packages/api/src/services/b2b-credits.ts`
+- `packages/api/__tests__/services/b2b-credits.test.ts`
+- `supabase/migrations/013_store_shopper_credit_rpc.sql`
+- `wearon-shopify/extensions/wearon-tryon/assets/tryon-privacy-flow.js`
+- `wearon-shopify/extensions/wearon-tryon/assets/tryon-widget.js`
+- `wearon-shopify/__tests__/tryon-privacy-flow.test.js`
+- `wearon-shopify/__tests__/tryon-widget.test.js`

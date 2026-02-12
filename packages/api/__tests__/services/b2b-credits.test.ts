@@ -37,9 +37,15 @@ vi.mock('@supabase/supabase-js', () => ({
 }))
 
 // Import AFTER mocks are set up
-const { deductStoreCredit, refundStoreCredit, getStoreBalance } = await import(
-  '../../src/services/b2b-credits'
-)
+const {
+  deductStoreCredit,
+  deductStoreShopperCredit,
+  refundStoreCredit,
+  refundStoreShopperCredit,
+  getStoreBalance,
+  addStoreCredits,
+  getStoreBillingProfile,
+} = await import('../../src/services/b2b-credits')
 
 describe('B2B credit service', () => {
   beforeEach(() => {
@@ -71,9 +77,9 @@ describe('B2B credit service', () => {
     it('throws on RPC error', async () => {
       mockRpc.mockResolvedValue({ data: null, error: { message: 'RPC failed' } })
 
-      await expect(
-        deductStoreCredit('store-123', 'req_abc', 'Test deduction'),
-      ).rejects.toThrow('Credit deduction failed')
+      await expect(deductStoreCredit('store-123', 'req_abc', 'Test deduction')).rejects.toThrow(
+        'Credit deduction failed'
+      )
     })
 
     it('uses default description when not provided', async () => {
@@ -107,9 +113,9 @@ describe('B2B credit service', () => {
     it('throws on RPC error', async () => {
       mockRpc.mockResolvedValue({ data: null, error: { message: 'RPC failed' } })
 
-      await expect(
-        refundStoreCredit('store-123', 'req_abc', 'Test refund'),
-      ).rejects.toThrow('Credit refund failed')
+      await expect(refundStoreCredit('store-123', 'req_abc', 'Test refund')).rejects.toThrow(
+        'Credit refund failed'
+      )
     })
 
     it('uses default description when not provided', async () => {
@@ -122,6 +128,49 @@ describe('B2B credit service', () => {
         p_amount: 1,
         p_request_id: 'req_abc',
         p_description: 'Generation failed - refund',
+      })
+    })
+  })
+
+  describe('deductStoreShopperCredit', () => {
+    it('calls deduct_store_shopper_credits RPC with shopper email params', async () => {
+      mockRpc.mockResolvedValue({ data: true, error: null })
+
+      const result = await deductStoreShopperCredit(
+        'store-123',
+        'shopper@example.com',
+        'req_abc',
+        'Shopper generation',
+      )
+
+      expect(mockRpc).toHaveBeenCalledWith('deduct_store_shopper_credits', {
+        p_store_id: 'store-123',
+        p_shopper_email: 'shopper@example.com',
+        p_amount: 1,
+        p_request_id: 'req_abc',
+        p_description: 'Shopper generation',
+      })
+      expect(result).toBe(true)
+    })
+  })
+
+  describe('refundStoreShopperCredit', () => {
+    it('calls refund_store_shopper_credits RPC with shopper email params', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: null })
+
+      await refundStoreShopperCredit(
+        'store-123',
+        'shopper@example.com',
+        'req_abc',
+        'Shopper generation failed',
+      )
+
+      expect(mockRpc).toHaveBeenCalledWith('refund_store_shopper_credits', {
+        p_store_id: 'store-123',
+        p_shopper_email: 'shopper@example.com',
+        p_amount: 1,
+        p_request_id: 'req_abc',
+        p_description: 'Shopper generation failed',
       })
     })
   })
@@ -142,15 +191,46 @@ describe('B2B credit service', () => {
       })
     })
 
-    it('returns zero values when store_credits not found', async () => {
+    it('throws when store_credits query fails', async () => {
       mockSingle.mockResolvedValue({ data: null, error: { message: 'Not found' } })
 
-      const result = await getStoreBalance('store-unknown')
+      await expect(getStoreBalance('store-unknown')).rejects.toThrow('Store balance query failed')
+    })
+  })
+
+  describe('addStoreCredits', () => {
+    it('throws actionable error when add_store_credits RPC is missing', async () => {
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: {
+          message: 'function add_store_credits(uuid, integer, text, text, text) does not exist',
+        },
+      })
+
+      await expect(
+        addStoreCredits('store-123', 10, 'purchase', 'req_abc', 'Top-up')
+      ).rejects.toThrow('requires migration 008_paddle_billing_schema.sql')
+    })
+  })
+
+  describe('getStoreBillingProfile', () => {
+    it('returns billing profile even when subscription_status column is unavailable', async () => {
+      mockSingle
+        .mockResolvedValueOnce({
+          data: { subscription_tier: 'starter', subscription_id: 'sub_123' },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: null,
+          error: { message: 'column stores.subscription_status does not exist' },
+        })
+
+      const result = await getStoreBillingProfile('store-123')
 
       expect(result).toEqual({
-        balance: 0,
-        totalPurchased: 0,
-        totalSpent: 0,
+        subscriptionTier: 'starter',
+        subscriptionId: 'sub_123',
+        subscriptionStatus: null,
       })
     })
   })

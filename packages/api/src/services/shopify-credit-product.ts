@@ -4,7 +4,16 @@ import { createShopifyClient } from './shopify'
 
 const CREDIT_PRODUCT_TITLE = 'Try-On Credit'
 const CREDIT_PRODUCT_TYPE = 'digital'
-const ONLINE_STORE_PUBLICATION_NAME = 'Online Store'
+const ONLINE_STORE_PUBLICATION_NAMES = [
+  'Online Store', // English
+  'Boutique en ligne', // French
+  'Tienda online', // Spanish
+  'Online-Shop', // German
+  'Loja online', // Portuguese
+  'Negozio online', // Italian
+  'Онлайн-магазин', // Russian
+  'オンラインストア', // Japanese
+]
 
 interface ShopifyUserError {
   field?: string[] | null
@@ -53,6 +62,19 @@ const UPDATE_VARIANT_PRICE_MUTATION = `
       userErrors {
         field
         message
+      }
+    }
+  }
+`
+
+const GET_PRODUCT_VARIANT_QUERY = `
+  query getProduct($id: ID!) {
+    product(id: $id) {
+      id
+      variants(first: 1) {
+        nodes {
+          id
+        }
       }
     }
   }
@@ -193,6 +215,36 @@ async function updateVariantPrice(
   }
 }
 
+async function getProductVariant(
+  client: ReturnType<typeof createShopifyClient>,
+  productId: string,
+): Promise<string | null> {
+  type GetProductResponse = {
+    product?: {
+      id: string
+      variants?: {
+        nodes?: Array<{
+          id: string
+        }>
+      }
+    } | null
+  }
+
+  const response = await client.request<GetProductResponse>(GET_PRODUCT_VARIANT_QUERY, {
+    variables: {
+      id: toProductGid(productId),
+    },
+  })
+
+  const variantGid = response.data?.product?.variants?.nodes?.[0]?.id
+
+  if (!variantGid) {
+    return null
+  }
+
+  return extractNumericId(variantGid)
+}
+
 async function removeFromOnlineStoreChannel(
   client: ReturnType<typeof createShopifyClient>,
   productId: string,
@@ -208,12 +260,14 @@ async function removeFromOnlineStoreChannel(
 
   const publicationsResponse = await client.request<PublicationsQueryResponse>(LIST_PUBLICATIONS_QUERY)
   const publicationNodes = publicationsResponse.data?.publications?.nodes || []
-  const onlineStorePublication = publicationNodes.find(
-    (publication) => publication.name === ONLINE_STORE_PUBLICATION_NAME,
+  const onlineStorePublication = publicationNodes.find((publication) =>
+    ONLINE_STORE_PUBLICATION_NAMES.includes(publication.name),
   )
 
   if (!onlineStorePublication?.id) {
-    throw new Error(`Shopify publication "${ONLINE_STORE_PUBLICATION_NAME}" not found`)
+    throw new Error(
+      `Shopify Online Store publication not found. Available: ${publicationNodes.map((p) => p.name).join(', ')}`,
+    )
   }
 
   type PublishableUnpublishResponse = {
@@ -248,11 +302,34 @@ export async function ensureHiddenTryOnCreditProduct(
   const existingVariantId = params.existingVariantId?.trim() || null
 
   if (existingProductId && existingVariantId) {
+    log.info(
+      { shopDomain: params.shopDomain, productId: existingProductId },
+      '[Shopify Credit Product] Updating existing product price',
+    )
     await updateVariantPrice(shopifyClient, existingVariantId, params.retailCreditPrice)
     return {
       shopifyProductId: existingProductId,
       shopifyVariantId: existingVariantId,
     }
+  }
+
+  if (existingProductId && !existingVariantId) {
+    log.warn(
+      { shopDomain: params.shopDomain, productId: existingProductId },
+      '[Shopify Credit Product] Partial state detected - querying Shopify for variant',
+    )
+    const reconciledVariantId = await getProductVariant(shopifyClient, existingProductId)
+    if (reconciledVariantId) {
+      await updateVariantPrice(shopifyClient, reconciledVariantId, params.retailCreditPrice)
+      return {
+        shopifyProductId: existingProductId,
+        shopifyVariantId: reconciledVariantId,
+      }
+    }
+    log.warn(
+      { shopDomain: params.shopDomain, productId: existingProductId },
+      '[Shopify Credit Product] Failed to reconcile variant - creating new product',
+    )
   }
 
   log.info({ shopDomain: params.shopDomain }, '[Shopify Credit Product] Creating hidden Try-On Credit product')

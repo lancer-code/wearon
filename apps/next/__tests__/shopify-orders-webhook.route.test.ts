@@ -265,7 +265,10 @@ describe('POST /api/v1/webhooks/shopify/orders', () => {
       expect.objectContaining({
         store_id: 'store_123',
         event_type: 'store_credit_insufficient',
-        shopper_email: 'shopper@example.com',
+        metadata: expect.objectContaining({
+          shopper_email_hash: expect.any(String),
+          reason: 'insufficient_store_credits',
+        }),
       }),
     )
   })

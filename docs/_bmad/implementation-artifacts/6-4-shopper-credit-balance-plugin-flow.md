@@ -1,6 +1,6 @@
 # Story 6.4: Shopper Credit Balance & Plugin Flow (wearon-shopify)
 
-Status: review
+Status: done
 
 ## Story
 
@@ -45,6 +45,10 @@ so that **I can pay for the try-on experience through the store's checkout**.
   - [x] 4.3 Test resell mode generation deducts from shopper credits.
   - [x] 4.4 Test absorb mode generation deducts from store credits.
   - [x] 4.5 Test insufficient shopper credits returns 402.
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] All 5 overage flow tests missing required `age_verified: true` field in request body, causing 100% test failure rate (all returning 403 age verification error instead of testing overage billing logic). [apps/next/__tests__/b2b-generation-overage.route.test.ts:121,174,200,235,277] **FIXED 2026-02-13**: Added `age_verified: true` to all 5 test request bodies. All 8 Story 6.4 tests now passing (3 shopper balance + 5 overage flow).
 
 ## Dev Notes
 
@@ -127,3 +131,8 @@ Codex GPT-5
 - `wearon-shopify/extensions/wearon-tryon/assets/tryon-widget.js`
 - `wearon-shopify/__tests__/tryon-privacy-flow.test.js`
 - `wearon-shopify/__tests__/tryon-widget.test.js`
+- `apps/next/__tests__/b2b-generation-overage.route.test.ts` (overage flow tests)
+
+### Change Log
+
+- 2026-02-13: Code review found critical test gap: all 5 overage flow tests missing `age_verified: true`, causing 100% failure rate (all returning 403 instead of testing overage logic). Fixed all test cases, all 8 tests now passing. Story marked done.

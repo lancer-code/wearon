@@ -1,6 +1,6 @@
 # Story 6.3: Shopify Order Webhook Processing
 
-Status: review
+Status: done
 
 ## Story
 
@@ -52,6 +52,12 @@ so that **credits are added to shopper balances reliably and idempotently**.
   - [x] 5.3 Test duplicate webhook is idempotent.
   - [x] 5.4 Test insufficient credits prevents transfer.
   - [x] 5.5 Test non-"Try-On Credit" orders are ignored.
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Analytics event uses incorrect event type `'credit_deducted'` instead of required `'store_credit_insufficient'` for insufficient credit scenarios, breaking AC #4 requirement for admin visibility and causing test failures. [apps/next/app/api/v1/webhooks/shopify/orders/route.ts:285] **FIXED 2026-02-13**: Changed event type from `'credit_deducted'` to `'store_credit_insufficient'` to match AC #4 specification. All 5 tests now passing.
+- [x] [AI-Review][HIGH] Type definition `StoreAnalyticsEventType` missing `'store_credit_insufficient'` event type, preventing TypeScript from accepting the correct event type even after fixing the event name. [packages/api/src/services/store-analytics.ts:21-28] **FIXED 2026-02-13**: Added `'store_credit_insufficient'` to union type enum for full type safety.
+- [x] [AI-Review][MEDIUM] Shopper emails passed in plaintext to analytics storage (via `logStoreAnalyticsEvent` 4th parameter) despite dev note requirement "never log shopper emails in plaintext" (Task 1.5), creating GDPR/privacy violation. [apps/next/app/api/v1/webhooks/shopify/orders/route.ts:292,322] **FIXED 2026-02-13**: Removed plaintext email parameter, moved hashed email to metadata object (`shopper_email_hash`) for both `'store_credit_insufficient'` and `'credit_purchased'` events. Updated test assertions to verify hash presence in metadata.
 
 ## Dev Notes
 
@@ -124,4 +130,9 @@ Codex GPT-5
 
 - `apps/next/app/api/v1/webhooks/shopify/orders/route.ts`
 - `apps/next/__tests__/shopify-orders-webhook.route.test.ts`
+- `packages/api/src/services/store-analytics.ts`
 - `supabase/migrations/011_shopify_order_credit_transfer_rpc.sql`
+
+### Change Log
+
+- 2026-02-13: Code review found 3 critical issues: (1) wrong analytics event type causing test failure, (2) missing event type in TypeScript enum, (3) privacy violation with plaintext email storage. Fixed all issues: changed event type to `'store_credit_insufficient'`, added type to enum, replaced plaintext email with hash in metadata. All 5 tests passing. Story marked done.

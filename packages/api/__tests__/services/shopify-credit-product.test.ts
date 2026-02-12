@@ -167,6 +167,166 @@ describe('shopify credit product service', () => {
         retailCreditPrice: 1,
         shopDomain: 'shop.myshopify.com',
       }),
-    ).rejects.toThrow('Shopify publication "Online Store" not found')
+    ).rejects.toThrow('Shopify Online Store publication not found')
+  })
+
+  it('reconciles partial state by querying shopify when productId exists but variantId is missing', async () => {
+    mockClientRequest
+      .mockResolvedValueOnce({
+        data: {
+          product: {
+            id: 'gid://shopify/Product/333222111',
+            variants: {
+              nodes: [{ id: 'gid://shopify/ProductVariant/999888777' }],
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          productVariantUpdate: {
+            productVariant: { id: 'gid://shopify/ProductVariant/999888777' },
+            userErrors: [],
+          },
+        },
+      })
+
+    const { ensureHiddenTryOnCreditProduct } = await import('../../src/services/shopify-credit-product')
+    const result = await ensureHiddenTryOnCreditProduct({
+      accessTokenEncrypted: 'encrypted-token',
+      existingProductId: '333222111',
+      existingVariantId: null,
+      requestId: 'req_test_partial',
+      retailCreditPrice: 0.6,
+      shopDomain: 'shop.myshopify.com',
+    })
+
+    expect(result).toEqual({
+      shopifyProductId: '333222111',
+      shopifyVariantId: '999888777',
+    })
+    expect(mockClientRequest).toHaveBeenCalledTimes(2)
+    expect(mockClientRequest.mock.calls[0]?.[0]).toContain('query getProduct')
+    expect(mockClientRequest.mock.calls[1]?.[0]).toContain('mutation productVariantUpdate')
+  })
+
+  it('creates new product when partial state cannot be reconciled', async () => {
+    mockClientRequest
+      .mockResolvedValueOnce({
+        data: {
+          product: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          productCreate: {
+            product: {
+              id: 'gid://shopify/Product/555666777',
+              variants: {
+                nodes: [{ id: 'gid://shopify/ProductVariant/888999000' }],
+              },
+            },
+            userErrors: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          productVariantUpdate: {
+            productVariant: { id: 'gid://shopify/ProductVariant/888999000' },
+            userErrors: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          publications: {
+            nodes: [{ id: 'gid://shopify/Publication/123', name: 'Online Store' }],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          publishableUnpublish: {
+            userErrors: [],
+          },
+        },
+      })
+
+    const { ensureHiddenTryOnCreditProduct } = await import('../../src/services/shopify-credit-product')
+    const result = await ensureHiddenTryOnCreditProduct({
+      accessTokenEncrypted: 'encrypted-token',
+      existingProductId: '999999999',
+      existingVariantId: null,
+      requestId: 'req_test_fallback',
+      retailCreditPrice: 0.8,
+      shopDomain: 'shop.myshopify.com',
+    })
+
+    expect(result).toEqual({
+      shopifyProductId: '555666777',
+      shopifyVariantId: '888999000',
+    })
+    expect(mockClientRequest).toHaveBeenCalledTimes(5)
+  })
+
+  it('supports localized online store publication names', async () => {
+    mockClientRequest
+      .mockResolvedValueOnce({
+        data: {
+          productCreate: {
+            product: {
+              id: 'gid://shopify/Product/111222333',
+              variants: {
+                nodes: [{ id: 'gid://shopify/ProductVariant/444555666' }],
+              },
+            },
+            userErrors: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          productVariantUpdate: {
+            productVariant: { id: 'gid://shopify/ProductVariant/444555666' },
+            userErrors: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          publications: {
+            nodes: [
+              { id: 'gid://shopify/Publication/123', name: 'Boutique en ligne' },
+              { id: 'gid://shopify/Publication/456', name: 'Point of Sale' },
+            ],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          publishableUnpublish: {
+            userErrors: [],
+          },
+        },
+      })
+
+    const { ensureHiddenTryOnCreditProduct } = await import('../../src/services/shopify-credit-product')
+    const result = await ensureHiddenTryOnCreditProduct({
+      accessTokenEncrypted: 'encrypted-token',
+      requestId: 'req_test_fr',
+      retailCreditPrice: 0.5,
+      shopDomain: 'shop.myshopify.com',
+    })
+
+    expect(result.shopifyProductId).toBe('111222333')
+    expect(mockClientRequest.mock.calls[3]?.[1]).toEqual({
+      variables: {
+        id: 'gid://shopify/Product/111222333',
+        input: {
+          publicationId: 'gid://shopify/Publication/123',
+        },
+      },
+    })
   })
 })

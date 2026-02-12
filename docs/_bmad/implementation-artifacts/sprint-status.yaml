@@ -43,7 +43,7 @@ development_status:
   1-1-b2b-database-schema: done
   1-2-cross-repo-infrastructure: done
   1-3-redis-queue-service-bullmq-removal: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: Store Onboarding & Management
   epic-2: in-progress

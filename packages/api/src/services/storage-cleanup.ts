@@ -115,7 +115,7 @@ export async function cleanupExpiredFiles(): Promise<CleanupResult> {
 export async function cleanupOldSessions(): Promise<number> {
   const cutoffTime = new Date(Date.now() - EXPIRY_HOURS * 60 * 60 * 1000)
 
-  const { data, error } = await supabase
+  const { data, error } = await getAdminClient()
     .from('generation_sessions')
     .update({
       model_image_url: 'expired',
@@ -159,7 +159,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
 
   try {
     // Find stuck sessions (processing or pending for too long)
-    const { data: stuckSessions, error: fetchError } = await supabase
+    const { data: stuckSessions, error: fetchError } = await getAdminClient()
       .from('generation_sessions')
       .select('id, user_id, status, created_at')
       .in('status', ['processing', 'pending'])
@@ -193,7 +193,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
         }
 
         // Mark session as failed
-        const { error: updateError } = await supabase
+        const { error: updateError } = await getAdminClient()
           .from('generation_sessions')
           .update({
             status: 'failed',

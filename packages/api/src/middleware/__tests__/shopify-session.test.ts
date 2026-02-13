@@ -28,13 +28,30 @@ vi.mock('../../lib/supabase-admin', () => ({
 }))
 
 // Mock logger
+const mockChildLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}
 vi.mock('../../logger', () => ({
   logger: {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   },
+  createChildLogger: vi.fn(() => mockChildLogger),
 }))
+
+// Mock merchant-ops to provide MerchantOpsError without loading full dependency tree
+vi.mock('../../services/merchant-ops', () => {
+  class MerchantOpsError extends Error {
+    constructor(message: string, public readonly code: string) {
+      super(message)
+      this.name = 'MerchantOpsError'
+    }
+  }
+  return { MerchantOpsError }
+})
 
 import { authenticateShopifySession } from '../shopify-session'
 

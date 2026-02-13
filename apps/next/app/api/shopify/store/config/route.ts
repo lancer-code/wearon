@@ -1,11 +1,12 @@
 import { withShopifySession } from '@api/middleware/shopify-session'
 import type { ShopifySessionContext } from '@api/middleware/shopify-session'
 import { getStoreConfig, updateStoreConfig } from '@api/services/merchant-ops'
+import { toSnakeCase } from '@api/utils/snake-case'
 import { NextResponse } from 'next/server'
 
 async function handleGet(_request: Request, context: ShopifySessionContext) {
   const config = await getStoreConfig(context.storeId)
-  return NextResponse.json(config)
+  return NextResponse.json({ data: toSnakeCase(config), error: null })
 }
 
 async function handlePatch(request: Request, context: ShopifySessionContext) {
@@ -14,14 +15,14 @@ async function handlePatch(request: Request, context: ShopifySessionContext) {
     body = await request.json()
   } catch {
     return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON body' } },
+      { data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON body' } },
       { status: 400 }
     )
   }
 
   if (!body || typeof body !== 'object') {
     return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: 'Request body must be a JSON object' } },
+      { data: null, error: { code: 'VALIDATION_ERROR', message: 'Request body must be a JSON object' } },
       { status: 400 }
     )
   }
@@ -32,7 +33,7 @@ async function handlePatch(request: Request, context: ShopifySessionContext) {
 
   if (billingMode !== 'absorb_mode' && billingMode !== 'resell_mode') {
     return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: 'billing_mode must be absorb_mode or resell_mode' } },
+      { data: null, error: { code: 'VALIDATION_ERROR', message: 'billing_mode must be absorb_mode or resell_mode' } },
       { status: 400 }
     )
   }
@@ -45,14 +46,14 @@ async function handlePatch(request: Request, context: ShopifySessionContext) {
       retailCreditPrice > 100
     ) {
       return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'retail_credit_price must be a positive number up to $100 when billing_mode is resell_mode' } },
+        { data: null, error: { code: 'VALIDATION_ERROR', message: 'retail_credit_price must be a positive number up to $100 when billing_mode is resell_mode' } },
         { status: 400 }
       )
     }
   }
 
   const config = await updateStoreConfig(context.storeId, billingMode, retailCreditPrice)
-  return NextResponse.json(config)
+  return NextResponse.json({ data: toSnakeCase(config), error: null })
 }
 
 export const GET = withShopifySession(handleGet)

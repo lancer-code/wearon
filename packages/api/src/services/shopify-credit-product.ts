@@ -102,6 +102,21 @@ const UNPUBLISH_FROM_ONLINE_STORE_MUTATION = `
   }
 `
 
+const UPDATE_PRODUCT_STATUS_MUTATION = `
+  mutation productUpdate($input: ProductInput!) {
+    productUpdate(input: $input) {
+      product {
+        id
+        status
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`
+
 function formatPrice(price: number): string {
   return price.toFixed(2)
 }
@@ -163,6 +178,7 @@ async function createCreditProduct(
       input: {
         title: CREDIT_PRODUCT_TITLE,
         productType: CREDIT_PRODUCT_TYPE,
+        status: 'DRAFT',
       },
     },
   })
@@ -295,6 +311,29 @@ async function removeFromOnlineStoreChannel(
   throwOnUserErrors('publishableUnpublish', unpublishResponse.data?.publishableUnpublish?.userErrors)
 }
 
+async function activateProduct(
+  client: ReturnType<typeof createShopifyClient>,
+  productId: string,
+): Promise<void> {
+  type ProductUpdateResponse = {
+    productUpdate?: {
+      product?: { id: string; status: string } | null
+      userErrors?: ShopifyUserError[] | null
+    } | null
+  }
+
+  const response = await client.request<ProductUpdateResponse>(UPDATE_PRODUCT_STATUS_MUTATION, {
+    variables: {
+      input: {
+        id: toProductGid(productId),
+        status: 'ACTIVE',
+      },
+    },
+  })
+
+  throwOnUserErrors('productUpdate', response.data?.productUpdate?.userErrors)
+}
+
 export async function ensureHiddenTryOnCreditProduct(
   params: EnsureHiddenCreditProductParams,
 ): Promise<EnsureHiddenCreditProductResult> {
@@ -339,6 +378,7 @@ export async function ensureHiddenTryOnCreditProduct(
   log.info({ shopDomain: params.shopDomain }, '[Shopify Credit Product] Creating hidden Try-On Credit product')
   const createdProduct = await createCreditProduct(shopifyClient, params.retailCreditPrice)
   await removeFromOnlineStoreChannel(shopifyClient, createdProduct.productGid)
+  await activateProduct(shopifyClient, createdProduct.productGid)
 
   return {
     shopifyProductId: createdProduct.productId,

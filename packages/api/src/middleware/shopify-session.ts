@@ -1,9 +1,11 @@
 import crypto from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { getAdminClient } from '../lib/supabase-admin'
-import { logger } from '../logger'
+import { createChildLogger, logger } from '../logger'
+import { MerchantOpsError } from '../services/merchant-ops'
 import { exchangeTokenForOfflineAccess } from '../services/shopify'
 import { encrypt } from '../utils/encryption'
+import { extractRequestId } from './request-id'
 
 export interface ShopifySessionContext {
   storeId: string
@@ -85,6 +87,12 @@ function verifySessionToken(token: string): ShopifySessionTokenPayload {
     throw new Error('JWT has expired')
   }
 
+  // Verify issuer matches the shop destination
+  const expectedIssPrefix = `${payload.dest}/admin`
+  if (!payload.iss || !payload.iss.startsWith(expectedIssPrefix)) {
+    throw new Error('JWT issuer does not match shop destination')
+  }
+
   return payload
 }
 
@@ -99,9 +107,11 @@ function extractShopDomain(dest: string): string {
 }
 
 async function lookupStoreByDomain(
-  shopDomain: string
+  shopDomain: string,
+  requestId: string
 ): Promise<{ id: string; shop_domain: string; status: string } | null> {
   const supabase = getAdminClient()
+  const log = createChildLogger(requestId)
 
   const { data, error } = await supabase
     .from('stores')
@@ -110,7 +120,7 @@ async function lookupStoreByDomain(
     .single()
 
   if (error) {
-    console.log('[Shopify Session] Lookup error:', error.code, error.message, 'for:', shopDomain)
+    log.warn({ shop: shopDomain, code: error.code, err: error.message }, '[Shopify Session] Store lookup error')
     return null
   }
 
@@ -123,29 +133,31 @@ async function lookupStoreByDomain(
 
 async function provisionStore(
   shopDomain: string,
-  sessionToken: string
+  sessionToken: string,
+  requestId: string
 ): Promise<{ id: string; shop_domain: string; status: string } | null> {
+  const log = createChildLogger(requestId)
+
   try {
-    console.log('[Shopify Session] Step 1: Starting token exchange for:', shopDomain)
+    log.info({ shop: shopDomain }, '[Shopify Session] Starting token exchange')
 
     let accessToken: string
     try {
       const result = await exchangeTokenForOfflineAccess(shopDomain, sessionToken)
       accessToken = result.accessToken
-      console.log('[Shopify Session] Step 2: Token exchange succeeded for:', shopDomain)
+      log.info({ shop: shopDomain }, '[Shopify Session] Token exchange succeeded')
     } catch (tokenErr) {
-      console.error('[Shopify Session] Token exchange FAILED:', JSON.stringify({
-        shop: shopDomain,
-        error: tokenErr instanceof Error ? tokenErr.message : String(tokenErr),
-        stack: tokenErr instanceof Error ? tokenErr.stack : undefined,
-      }))
+      log.error(
+        { shop: shopDomain, err: tokenErr instanceof Error ? tokenErr.message : String(tokenErr) },
+        '[Shopify Session] Token exchange failed'
+      )
       return null
     }
 
     const encryptedToken = encrypt(accessToken)
     const supabase = getAdminClient()
 
-    console.log('[Shopify Session] Step 3: Upserting store into DB for:', shopDomain)
+    log.info({ shop: shopDomain }, '[Shopify Session] Upserting store into DB')
     const { data: store, error } = await supabase
       .from('stores')
       .upsert(
@@ -154,7 +166,6 @@ async function provisionStore(
           access_token_encrypted: encryptedToken,
           status: 'active',
           billing_mode: 'absorb_mode',
-          onboarding_completed: false,
         },
         { onConflict: 'shop_domain' }
       )
@@ -162,16 +173,14 @@ async function provisionStore(
       .single()
 
     if (error || !store) {
-      console.error('[Shopify Session] DB upsert FAILED:', JSON.stringify({
-        shop: shopDomain,
-        error: error?.message,
-        code: error?.code,
-        details: error?.details,
-      }))
+      log.error(
+        { shop: shopDomain, err: error?.message, code: error?.code },
+        '[Shopify Session] DB upsert failed'
+      )
       return null
     }
 
-    console.log('[Shopify Session] Step 4: Store upserted, ensuring API key. storeId:', store.id)
+    log.info({ shop: shopDomain, store_id: store.id }, '[Shopify Session] Store upserted, ensuring API key')
 
     // Check if API key already exists (re-install case)
     const { data: existingKeys } = await supabase
@@ -193,24 +202,23 @@ async function provisionStore(
         allowed_domains: [`https://${shopDomain}`],
         is_active: true,
       })
-      console.log('[Shopify Session] Step 5: API key created for:', store.id)
+      log.info({ store_id: store.id }, '[Shopify Session] API key created')
     } else {
       // Re-activate existing keys on re-install
       await supabase
         .from('store_api_keys')
         .update({ is_active: true })
         .eq('store_id', store.id)
-      console.log('[Shopify Session] Step 5: Existing API keys re-activated for:', store.id)
+      log.info({ store_id: store.id }, '[Shopify Session] Existing API keys re-activated')
     }
 
-    console.log('[Shopify Session] Provisioning complete:', store.id, shopDomain)
+    log.info({ store_id: store.id, shop: shopDomain }, '[Shopify Session] Provisioning complete')
     return store as { id: string; shop_domain: string; status: string }
   } catch (err) {
-    console.error('[Shopify Session] Unexpected provisioning error:', JSON.stringify({
-      shop: shopDomain,
-      error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
-    }))
+    log.error(
+      { shop: shopDomain, err: err instanceof Error ? err.message : String(err) },
+      '[Shopify Session] Unexpected provisioning error'
+    )
     return null
   }
 }
@@ -222,6 +230,8 @@ export type ShopifySessionResult =
 export async function authenticateShopifySession(
   request: Request
 ): Promise<ShopifySessionResult> {
+  const requestId = extractRequestId(request)
+  const log = createChildLogger(requestId)
   const authHeader = request.headers.get('authorization')
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -239,7 +249,7 @@ export async function authenticateShopifySession(
   try {
     payload = verifySessionToken(token)
   } catch (err) {
-    logger.warn(
+    log.warn(
       { err: err instanceof Error ? err.message : String(err) },
       '[Shopify Session] Token verification failed'
     )
@@ -252,23 +262,23 @@ export async function authenticateShopifySession(
   }
 
   const shopDomain = extractShopDomain(payload.dest)
-  console.log('[Shopify Session] Shop domain from JWT:', shopDomain)
+  log.info({ shop: shopDomain }, '[Shopify Session] Shop domain from JWT')
 
-  let store = await lookupStoreByDomain(shopDomain)
+  let store = await lookupStoreByDomain(shopDomain, requestId)
 
   // Auto-provision or re-activate: with managed installation, Shopify doesn't call
   // an OAuth callback. The store is created/updated on first authenticated request.
   if (!store || store.status !== 'active') {
     if (!store) {
-      console.log('[Shopify Session] Store not found, provisioning for:', shopDomain)
+      log.info({ shop: shopDomain }, '[Shopify Session] Store not found, provisioning')
     } else {
-      console.log('[Shopify Session] Store inactive, re-provisioning for:', shopDomain)
+      log.info({ shop: shopDomain }, '[Shopify Session] Store inactive, re-provisioning')
     }
-    store = await provisionStore(shopDomain, token)
+    store = await provisionStore(shopDomain, token, requestId)
   }
 
   if (!store) {
-    console.error('[Shopify Session] Store not found and provisioning failed for:', shopDomain)
+    log.error({ shop: shopDomain }, '[Shopify Session] Store not found and provisioning failed')
     return {
       error: NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Store not found' } },
@@ -277,7 +287,7 @@ export async function authenticateShopifySession(
     }
   }
 
-  console.log('[Shopify Session] Authenticated:', shopDomain, 'storeId:', store.id)
+  log.info({ shop: shopDomain, store_id: store.id }, '[Shopify Session] Authenticated')
 
   return {
     context: {
@@ -301,12 +311,24 @@ export function withShopifySession(
     try {
       return await handler(request, result.context)
     } catch (err) {
+      if (err instanceof MerchantOpsError) {
+        const statusMap: Record<string, number> = {
+          NOT_FOUND: 404,
+          BAD_REQUEST: 400,
+          INTERNAL_ERROR: 500,
+        }
+        return NextResponse.json(
+          { data: null, error: { code: err.code, message: err.message } },
+          { status: statusMap[err.code] ?? 500 }
+        )
+      }
+
       logger.error(
         { err: err instanceof Error ? err.message : String(err) },
         '[Shopify Session] Unhandled error in handler'
       )
       return NextResponse.json(
-        { error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' } },
+        { data: null, error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' } },
         { status: 500 }
       )
     }

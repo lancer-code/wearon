@@ -67,6 +67,14 @@ describe('shopify credit product service', () => {
           },
         },
       })
+      .mockResolvedValueOnce({
+        data: {
+          productUpdate: {
+            product: { id: 'gid://shopify/Product/111222333', status: 'ACTIVE' },
+            userErrors: [],
+          },
+        },
+      })
 
     const { ensureHiddenTryOnCreditProduct } = await import('../../src/services/shopify-credit-product')
     const result = await ensureHiddenTryOnCreditProduct({
@@ -84,11 +92,12 @@ describe('shopify credit product service', () => {
     })
     expect(mockDecrypt).toHaveBeenCalledWith('encrypted-token')
     expect(mockCreateShopifyClient).toHaveBeenCalledWith('shop.myshopify.com', 'decrypted-access-token')
-    expect(mockClientRequest).toHaveBeenCalledTimes(4)
+    expect(mockClientRequest).toHaveBeenCalledTimes(5)
     expect(mockClientRequest.mock.calls[0]?.[0]).toContain('mutation productCreate')
     expect(mockClientRequest.mock.calls[1]?.[0]).toContain('mutation productVariantsBulkUpdate')
     expect(mockClientRequest.mock.calls[2]?.[0]).toContain('query publications')
     expect(mockClientRequest.mock.calls[3]?.[0]).toContain('mutation publishableUnpublish')
+    expect(mockClientRequest.mock.calls[4]?.[0]).toContain('mutation productUpdate')
   })
 
   it('updates existing variant price without creating a new product', async () => {
@@ -255,6 +264,14 @@ describe('shopify credit product service', () => {
           },
         },
       })
+      .mockResolvedValueOnce({
+        data: {
+          productUpdate: {
+            product: { id: 'gid://shopify/Product/555666777', status: 'ACTIVE' },
+            userErrors: [],
+          },
+        },
+      })
 
     const { ensureHiddenTryOnCreditProduct } = await import('../../src/services/shopify-credit-product')
     const result = await ensureHiddenTryOnCreditProduct({
@@ -270,7 +287,7 @@ describe('shopify credit product service', () => {
       shopifyProductId: '555666777',
       shopifyVariantId: '888999000',
     })
-    expect(mockClientRequest).toHaveBeenCalledTimes(5)
+    expect(mockClientRequest).toHaveBeenCalledTimes(6)
   })
 
   it('supports localized online store publication names', async () => {
@@ -309,6 +326,14 @@ describe('shopify credit product service', () => {
       .mockResolvedValueOnce({
         data: {
           publishableUnpublish: {
+            userErrors: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          productUpdate: {
+            product: { id: 'gid://shopify/Product/111222333', status: 'ACTIVE' },
             userErrors: [],
           },
         },

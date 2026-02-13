@@ -109,7 +109,12 @@ async function lookupStoreByDomain(
     .eq('shop_domain', shopDomain)
     .single()
 
-  if (error || !data) {
+  if (error) {
+    console.log('[Shopify Session] Lookup error:', error.code, error.message, 'for:', shopDomain)
+    return null
+  }
+
+  if (!data) {
     return null
   }
 
@@ -140,21 +145,24 @@ async function provisionStore(
     const encryptedToken = encrypt(accessToken)
     const supabase = getAdminClient()
 
-    console.log('[Shopify Session] Step 3: Inserting store into DB for:', shopDomain)
+    console.log('[Shopify Session] Step 3: Upserting store into DB for:', shopDomain)
     const { data: store, error } = await supabase
       .from('stores')
-      .insert({
-        shop_domain: shopDomain,
-        access_token_encrypted: encryptedToken,
-        status: 'active',
-        billing_mode: 'absorb_mode',
-        onboarding_completed: false,
-      })
+      .upsert(
+        {
+          shop_domain: shopDomain,
+          access_token_encrypted: encryptedToken,
+          status: 'active',
+          billing_mode: 'absorb_mode',
+          onboarding_completed: false,
+        },
+        { onConflict: 'shop_domain' }
+      )
       .select('id, shop_domain, status')
       .single()
 
     if (error || !store) {
-      console.error('[Shopify Session] DB insert FAILED:', JSON.stringify({
+      console.error('[Shopify Session] DB upsert FAILED:', JSON.stringify({
         shop: shopDomain,
         error: error?.message,
         code: error?.code,
@@ -163,22 +171,39 @@ async function provisionStore(
       return null
     }
 
-    console.log('[Shopify Session] Step 4: Store created, generating API key. storeId:', store.id)
+    console.log('[Shopify Session] Step 4: Store upserted, ensuring API key. storeId:', store.id)
 
-    const randomHex = crypto.randomBytes(16).toString('hex')
-    const plaintext = `wk_${randomHex}`
-    const keyHash = crypto.createHash('sha256').update(plaintext).digest('hex')
-    const keyPrefix = plaintext.substring(0, 16)
+    // Check if API key already exists (re-install case)
+    const { data: existingKeys } = await supabase
+      .from('store_api_keys')
+      .select('id')
+      .eq('store_id', store.id)
+      .limit(1)
 
-    await supabase.from('store_api_keys').insert({
-      store_id: store.id,
-      key_hash: keyHash,
-      key_prefix: keyPrefix,
-      allowed_domains: [`https://${shopDomain}`],
-      is_active: true,
-    })
+    if (!existingKeys || existingKeys.length === 0) {
+      const randomHex = crypto.randomBytes(16).toString('hex')
+      const plaintext = `wk_${randomHex}`
+      const keyHash = crypto.createHash('sha256').update(plaintext).digest('hex')
+      const keyPrefix = plaintext.substring(0, 16)
 
-    console.log('[Shopify Session] Step 5: Provisioning complete:', store.id, shopDomain)
+      await supabase.from('store_api_keys').insert({
+        store_id: store.id,
+        key_hash: keyHash,
+        key_prefix: keyPrefix,
+        allowed_domains: [`https://${shopDomain}`],
+        is_active: true,
+      })
+      console.log('[Shopify Session] Step 5: API key created for:', store.id)
+    } else {
+      // Re-activate existing keys on re-install
+      await supabase
+        .from('store_api_keys')
+        .update({ is_active: true })
+        .eq('store_id', store.id)
+      console.log('[Shopify Session] Step 5: Existing API keys re-activated for:', store.id)
+    }
+
+    console.log('[Shopify Session] Provisioning complete:', store.id, shopDomain)
     return store as { id: string; shop_domain: string; status: string }
   } catch (err) {
     console.error('[Shopify Session] Unexpected provisioning error:', JSON.stringify({
@@ -231,10 +256,14 @@ export async function authenticateShopifySession(
 
   let store = await lookupStoreByDomain(shopDomain)
 
-  // Auto-provision: with managed installation, Shopify doesn't call the OAuth callback.
-  // The store must be created on first authenticated request via token exchange.
-  if (!store) {
-    console.log('[Shopify Session] Store not found, attempting auto-provision for:', shopDomain)
+  // Auto-provision or re-activate: with managed installation, Shopify doesn't call
+  // an OAuth callback. The store is created/updated on first authenticated request.
+  if (!store || store.status !== 'active') {
+    if (!store) {
+      console.log('[Shopify Session] Store not found, provisioning for:', shopDomain)
+    } else {
+      console.log('[Shopify Session] Store inactive, re-provisioning for:', shopDomain)
+    }
     store = await provisionStore(shopDomain, token)
   }
 
@@ -244,16 +273,6 @@ export async function authenticateShopifySession(
       error: NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Store not found' } },
         { status: 404 }
-      ),
-    }
-  }
-
-  if (store.status !== 'active') {
-    console.log('[Shopify Session] Store is not active:', shopDomain, store.status)
-    return {
-      error: NextResponse.json(
-        { error: { code: 'FORBIDDEN', message: 'Store account is not active' } },
-        { status: 403 }
       ),
     }
   }

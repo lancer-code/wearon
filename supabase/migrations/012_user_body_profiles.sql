@@ -2,7 +2,7 @@
 -- Migration: 012_user_body_profiles
 
 CREATE TABLE IF NOT EXISTS public.user_body_profiles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   height_cm NUMERIC NOT NULL,
   weight_kg NUMERIC,

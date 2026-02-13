@@ -6,7 +6,7 @@
 -- Task 2.1: store_generation_sessions table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.store_generation_sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   shopper_email TEXT,
   status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed')) DEFAULT 'queued',
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.store_generation_sessions (
 -- Task 2.2: store_analytics_events table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.store_analytics_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   event_type TEXT NOT NULL,
   shopper_email TEXT,

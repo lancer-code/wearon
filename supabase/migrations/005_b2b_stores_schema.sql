@@ -7,7 +7,7 @@
 -- Task 1.1: stores table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.stores (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   shop_domain TEXT NOT NULL UNIQUE,
   access_token_encrypted TEXT,
   billing_mode TEXT NOT NULL CHECK (billing_mode IN ('absorb_mode', 'resell_mode')) DEFAULT 'absorb_mode',
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.stores (
 -- Task 1.2: store_api_keys table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.store_api_keys (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   key_hash TEXT NOT NULL,
   allowed_domains TEXT[] NOT NULL DEFAULT '{}',
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.store_api_keys (
 -- Task 1.3: store_credits table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.store_credits (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   balance INTEGER NOT NULL DEFAULT 0,
   total_purchased INTEGER NOT NULL DEFAULT 0,
@@ -64,7 +64,7 @@ CREATE TRIGGER on_store_created
 -- Task 1.4: store_credit_transactions table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.store_credit_transactions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   amount INTEGER NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('deduction', 'refund', 'purchase', 'subscription', 'overage')),

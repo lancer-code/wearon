@@ -1,9 +1,6 @@
 -- Virtual Try-On Platform Database Schema
 -- Migration: 001_initial_schema
 
--- Enable UUID extension if not already enabled
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Users table (extends Supabase auth.users)
 CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -18,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 
 -- Credits table
 CREATE TABLE IF NOT EXISTS public.user_credits (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   balance INTEGER NOT NULL DEFAULT 10,
   total_earned INTEGER DEFAULT 10,
@@ -29,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.user_credits (
 
 -- Credit transactions log
 CREATE TABLE IF NOT EXISTS public.credit_transactions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   amount INTEGER NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('signup_bonus', 'generation', 'refund')),
@@ -39,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.credit_transactions (
 
 -- Generation sessions (history)
 CREATE TABLE IF NOT EXISTS public.generation_sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')) DEFAULT 'pending',
 
@@ -66,7 +63,7 @@ CREATE TABLE IF NOT EXISTS public.generation_sessions (
 
 -- Analytics events
 CREATE TABLE IF NOT EXISTS public.analytics_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_type TEXT NOT NULL,
   user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
   metadata JSONB DEFAULT '{}'::jsonb,

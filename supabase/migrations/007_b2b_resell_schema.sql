@@ -6,7 +6,7 @@
 -- Task 3.1: store_shopper_credits table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.store_shopper_credits (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   shopper_email TEXT NOT NULL,
   balance INTEGER NOT NULL DEFAULT 0,
@@ -27,7 +27,7 @@ CREATE TRIGGER update_store_shopper_credits_updated_at
 -- Task 3.2: store_shopper_purchases table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.store_shopper_purchases (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   shopper_email TEXT NOT NULL,
   shopify_order_id TEXT NOT NULL UNIQUE,

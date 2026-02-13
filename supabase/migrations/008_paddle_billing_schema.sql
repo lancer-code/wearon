@@ -61,7 +61,7 @@ COMMENT ON FUNCTION add_store_credits IS
 -- Webhook idempotency table (Paddle event processing)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.billing_webhook_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   provider TEXT NOT NULL CHECK (provider IN ('paddle')),
   event_id TEXT NOT NULL,
   event_type TEXT NOT NULL,

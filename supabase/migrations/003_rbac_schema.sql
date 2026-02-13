@@ -3,7 +3,7 @@
 
 -- Roles table
 CREATE TABLE IF NOT EXISTS public.roles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   description TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.roles (
 
 -- Permissions table
 CREATE TABLE IF NOT EXISTS public.permissions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   description TEXT,
   resource TEXT NOT NULL,  -- e.g., 'users', 'generations', 'credits', 'admin'

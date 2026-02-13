@@ -11,6 +11,7 @@ export default function ShopifyRootLayout({ children }: { children: ReactNode })
   // Inline script checks for shop/host params before loading App Bridge.
   // This prevents the "missing required configuration fields: shop" console error
   // when the page is accessed directly outside the Shopify admin iframe.
+  // Placed at the top of <body> — runs synchronously before React hydrates children.
   const bootstrapScript = `
     (function() {
       var params = new URLSearchParams(window.location.search);
@@ -25,12 +26,12 @@ export default function ShopifyRootLayout({ children }: { children: ReactNode })
 
   return (
     <html lang="en">
-      <head>
+      <body style={{ margin: 0 }}>
         {apiKey && (
           <script dangerouslySetInnerHTML={{ __html: bootstrapScript }} />
         )}
-      </head>
-      <body style={{ margin: 0 }}>{children}</body>
+        {children}
+      </body>
     </html>
   )
 }

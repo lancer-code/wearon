@@ -95,7 +95,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 
 **ADR-5: Billing — Free Connector App Pattern** — Plugin is free on Shopify App Store. Size rec works immediately for all visitors (no login needed). Virtual try-on requires store account login. Merchant billing: subscription + PAYG on WearOn platform via Paddle. No Shopify Billing API, no 20% rev share. Fallback: add Shopify Billing API if App Store review rejects this approach.
 
-**FP-1: Size Rec on Python Worker (MVP)** — MediaPipe pose estimation runs on the persistent Python worker process (DigitalOcean). 33 3D body landmarks for accurate size recommendations. Worker runs two interfaces: FastAPI HTTP server for synchronous size rec requests (<1s), Celery worker for async generation jobs. Model loads once on startup, stays warm.
+**FP-1: Size Rec on Python Worker (MVP)** — MediaPipe pose estimation runs on the persistent Python worker process (Docker container on VPS). 33 3D body landmarks for accurate size recommendations. Worker runs two interfaces: FastAPI HTTP server for synchronous size rec requests (<1s), Celery worker for async generation jobs. Model loads once on startup, stays warm.
 
 **FP-2: B2B Auth — Application-Level Scoping** — B2B API resolves API key → store_id in middleware, uses Supabase service role key, enforces store_id in WHERE clauses. No RLS for B2B (RLS requires Supabase JWT which B2B doesn't use).
 
@@ -141,7 +141,7 @@ Brownfield monorepo (wearon) + new separate Shopify plugin repo (wearon-shopify)
 |---|---|---|
 | **wearon** (existing) | Platform: B2B REST API, B2C tRPC, web app, mobile app, admin | Next.js 16, Expo, tRPC, Supabase, Vercel |
 | **wearon-shopify** (new) | Shopify plugin: App Bridge admin, theme app extension (storefront UI) | Shopify official React Router template |
-| **wearon-worker** (new) | Generation worker, size rec, image processing | Python, Celery, Redis, MediaPipe, FastAPI, DigitalOcean |
+| **wearon-worker** (new) | Generation worker, size rec, image processing | Python, Celery, Redis, MediaPipe, FastAPI, Docker (VPS) |
 
 ### WearOn Platform (Existing Monorepo)
 
@@ -201,7 +201,7 @@ shopify app init --template reactRouter
 - Storage path segmentation (B2B vs B2C)
 
 **Deferred Decisions (Post-MVP):**
-- Worker auto-scaling strategy (start with single DigitalOcean droplet)
+- Worker auto-scaling strategy (start with single VPS)
 - CDN for generated images
 - Worker health monitoring and alerting tooling
 - Multi-region deployment
@@ -327,48 +327,55 @@ shopify app init --template reactRouter
 - Environment variables managed via Vercel dashboard
 - Automatic deployments from Git
 
-**Python Worker: DigitalOcean App Platform**
-- Managed Docker deployment with auto-deploy from Git (no raw Droplet management)
+**Python Worker: Docker Container (Cloud-Agnostic VPS)**
+- Worker runs as a Docker container — deployable to any VPS with Docker (AWS, Hetzner, DigitalOcean, etc.)
 - Single container running Redis consumer + Celery + FastAPI server
-- Redis connection to managed Redis instance (provider TBD)
+- Docker Compose orchestrates worker + Redis for local development
+- Production: same Docker images deployed to VPS, Redis exposed with password auth for Vercel connection
 - MediaPipe model loaded once on process startup, stays warm in memory
-- FastAPI `/health` endpoint checks Redis connection + MediaPipe model loaded — App Platform auto-restarts on failure
-- Built-in logging and alerting (no manual Supervisor/systemd config)
-- Benchmark memory/CPU requirements before choosing plan (MediaPipe + Celery + FastAPI). Fallback: Droplet with Docker Compose + GitHub Actions auto-deploy
+- FastAPI `/health` endpoint checks Redis connection + MediaPipe model loaded — container restart on failure via Docker `restart: unless-stopped`
 
 **Shopify Plugin: Shopify Infrastructure**
 - Hosted and deployed via Shopify CLI
 - Theme app extension served from Shopify CDN
 - App Bridge pages rendered within Shopify Admin
 
-**Redis: Managed Service (provider TBD)**
-- Used for: Celery broker, rate limit counters
+**Redis: Self-Hosted Container (redis:7-alpine)**
+- Used for: Celery broker, rate limit counters, generation task queue
 - Single Redis instance shared across all services
+- Password-protected (`requirepass`) via `REDIS_PASSWORD` env var
+- Persistent storage via Docker volume (`redis-data`)
+- Production: exposed on VPS public IP with password auth; Vercel connects via `REDIS_URL`
+- Local dev: runs alongside worker via `docker-compose up`
 
 **CI/CD:**
 - wearon: Vercel auto-deploys from Git (existing)
-- wearon-worker: DigitalOcean App Platform auto-deploys from Git on push to main
+- wearon-worker: GitHub Actions workflow (`.github/workflows/ci-cd.yml`) with two jobs:
+  - **test** (CI): runs on PRs and pushes to main — Python 3.12 setup, system deps (libgl1, libglib2.0-0), pip install, pytest, Docker build validation. Uses dummy env vars for pydantic-settings import (tests mock all external services).
+  - **deploy** (CD): runs on push to main after test passes — builds multi-stage Docker image via BuildKit with GHA layer caching, pushes to `ghcr.io/lancer-code/wearon-worker:latest` and `:sha`, deploys to VPS via SSH (pull, stop, rm, run with `--env-file /opt/wearon/.env`). Requires `VPS_HOST`, `VPS_USERNAME`, `VPS_SSH_KEY` GitHub Secrets. Application secrets live only on VPS.
 - wearon-shopify: `shopify app deploy` via Makefile (manual or GitHub Action)
 - Cross-language integration test: GitHub Action on wearon repo spins up Redis + Python worker container, pushes sample task from Node.js, verifies Python processes it
 
 **Monitoring & Logging:**
 - Vercel: Built-in function logs and analytics
-- DigitalOcean App Platform: Built-in application logs and alerts
+- Worker: `docker compose logs` on VPS, structlog JSON output
 - Celery: Flower dashboard for task monitoring (optional, post-MVP)
 - Supabase: Built-in database monitoring
 
 **Scaling Strategy (Post-MVP):**
 - Vercel auto-scales serverless functions
-- DigitalOcean App Platform: Vertical scaling (larger container) → Horizontal scaling (multiple instances with Celery concurrency)
-- Redis: scales via managed service plan upgrade
+- Worker VPS: Vertical scaling (larger VPS) → Horizontal scaling (multiple instances with Celery concurrency)
+- Redis: vertical scaling on VPS or migrate to managed Redis service
 
 ### Resilience & Failure Handling
 
 **Celery Worker:**
 - `acks_late=True` — tasks requeued if worker dies before completion
-- `task_time_limit=60` — prevents stuck jobs
-- Startup cleanup: query Supabase for sessions stuck in "processing" >2 min → refund credits, mark failed
-- App Platform auto-restarts on health check failure
+- `task_time_limit=300` — accommodates 180s OpenAI timeout + download/upload overhead
+- Startup cleanup: query Supabase for sessions stuck in "processing" or "queued" → refund credits, mark failed
+- Docker auto-restarts on health check failure
+- Exponential backoff on OpenAI retries (2^attempt seconds)
+- Consumer loop sleeps 5s on unexpected errors to prevent tight-loop spam
 
 **Redis Unavailability:**
 - Next.js API catches Redis connection errors → returns 503 "temporarily unavailable"
@@ -377,8 +384,8 @@ shopify app init --template reactRouter
 - Size rec unaffected (FastAPI → MediaPipe is direct, no Redis)
 
 **OpenAI API Failures:**
-- 429 (rate limit): Celery retry with exponential backoff, max 3 retries
-- 500 (server error): Retry once, then fail
+- 429 (rate limit): Celery retry with 10s countdown, max 1 retry. Credit NOT refunded until final failure (prevents double-spend)
+- 500 (server error): httpx-level retry with exponential backoff (2^attempt seconds), max retries configurable via `OPENAI_MAX_RETRIES`
 - Moderation block: No retry, refund credit, user-friendly message
 - All final failures: refund credit, mark session failed
 
@@ -402,14 +409,14 @@ shopify app init --template reactRouter
 ### Operational Practices (Solo Dev)
 
 **Local Development:**
-- wearon: `yarn web` (existing)
-- wearon-worker: `docker-compose up` (Celery + FastAPI + Redis in one command)
+- wearon: `yarn web` (existing). Set `REDIS_URL=redis://:devpassword@localhost:6379/0` in `.env.local`
+- wearon-worker: `make dev` (runs `docker compose up --build` — starts Redis + worker + FastAPI in one command)
 - wearon-shopify: `shopify app dev` (Shopify CLI handles tunnel)
-- Three terminals, one command each. Shared Supabase cloud instance.
+- Three terminals, one command each. Shared Supabase cloud instance. Redis shared via localhost:6379.
 
 **Cross-Repo Debugging:**
 - Correlation ID (request_id) generated at entry point, passed through every hop: plugin → API header → Redis task → worker logs → Supabase session
-- Grep for request_id across Vercel logs, App Platform logs, and Supabase to trace full request lifecycle
+- Grep for request_id across Vercel logs, worker Docker logs, and Supabase to trace full request lifecycle
 
 **B2C Migration Strategy:**
 - Feature flag (USE_PYTHON_WORKER) to switch B2C between BullMQ and Redis queue
@@ -824,49 +831,65 @@ wearon-shopify/
 └── README.md
 ```
 
-### Repo 3: wearon-worker (New — DigitalOcean App Platform)
+### Repo 3: wearon-worker (New — Docker Container on VPS)
+
+**Status: IMPLEMENTED** — All core modules built, tested, and CI/CD pipeline active.
 
 ```
 wearon-worker/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml                      # GitHub Actions: test on PR, build+push+deploy on main
+│
 ├── worker/
-│   ├── consumer.py                        # Redis BRPOP consumer loop → dispatches to Celery
-│   ├── tasks.py                           # Celery task definitions (generation, cleanup)
-│   ├── celery_app.py                      # Celery config (broker, rate limits, acks_late)
-│   └── startup.py                         # Startup cleanup (stuck sessions → refund)
+│   ├── __init__.py
+│   ├── consumer.py                        # Redis BRPOP consumer loop → dispatches to Celery (5s backoff on errors)
+│   ├── tasks.py                           # Celery task: process_generation (download, resize, OpenAI, upload, refund)
+│   ├── celery_app.py                      # Celery config (broker, rate limits, acks_late, 300s time limit, concurrency)
+│   └── startup.py                         # Startup cleanup (stuck sessions → refund credits, mark failed)
 │
 ├── size_rec/
-│   ├── app.py                             # FastAPI app (health check + size rec endpoint)
-│   ├── mediapipe_service.py               # MediaPipe pose estimation (33 3D landmarks)
-│   └── size_calculator.py                 # Landmarks → size recommendation logic
+│   ├── __init__.py
+│   ├── app.py                             # FastAPI app (/health + /estimate-body endpoints)
+│   ├── mediapipe_service.py               # MediaPipe pose estimation (33 3D landmarks, singleton)
+│   ├── size_calculator.py                 # Landmarks → size recommendation logic
+│   └── image_processing.py                # Image download with content-type/size validation, SSRF protection
 │
 ├── services/
-│   ├── supabase_client.py                 # supabase-py client (service role key)
-│   ├── openai_client.py                   # OpenAI GPT Image 1.5 API calls
-│   ├── redis_client.py                    # Redis connection (shared consumer + rate limiter)
-│   └── image_processor.py                 # Pillow — resize to 1024px for cost optimization
+│   ├── __init__.py
+│   ├── supabase_client.py                 # supabase-py client (service role key, lazy singleton)
+│   ├── openai_client.py                   # OpenAI GPT Image 1.5 /images/edits via httpx (exponential backoff)
+│   ├── redis_client.py                    # Redis health check client (async ping)
+│   └── image_processor.py                 # Download + resize to 1024px for cost optimization (content-type/size validated)
 │
 ├── models/
-│   ├── task_payload.py                    # Pydantic: GenerationTask (strict validation)
-│   ├── generation.py                      # Pydantic: session status, result models
-│   └── size_rec.py                        # Pydantic: size rec request/response
+│   ├── __init__.py
+│   ├── task_payload.py                    # Pydantic: GenerationTask (matches queue.ts contract)
+│   ├── generation.py                      # Pydantic: SessionUpdate, SessionStatus
+│   └── size_rec.py                        # Pydantic: SizeRecRequest/SizeRecResponse
 │
 ├── config/
-│   ├── settings.py                        # Pydantic Settings (env vars)
+│   ├── __init__.py
+│   ├── settings.py                        # Pydantic Settings (REDIS_URL, SUPABASE_*, OPENAI_*)
 │   └── logging_config.py                  # structlog JSON formatter setup
 │
 ├── tests/
-│   ├── test_consumer.py                   # Redis consumer tests
-│   ├── test_tasks.py                      # Celery task tests
-│   ├── test_size_rec.py                   # MediaPipe + size calc tests
-│   └── test_task_payload.py               # Pydantic model validation tests
+│   ├── conftest.py                        # sys.path setup for project root
+│   ├── test_consumer.py                   # Redis consumer tests (mock BRPOP + dispatch, invalid JSON skip)
+│   ├── test_tasks.py                      # Celery task payload roundtrip tests
+│   ├── test_task_payload.py               # Pydantic model validation tests (b2b, b2c, invalid channel, defaults)
+│   ├── test_size_rec_app.py               # FastAPI endpoint + health check tests
+│   ├── test_mediapipe_service.py          # MediaPipe singleton + landmark extraction tests
+│   └── test_size_calculator.py            # Size mapping + measurement calculation tests
 │
-├── main.py                                # Entrypoint: starts Redis consumer + Celery + FastAPI
-├── Dockerfile                             # Multi-stage build for App Platform
-├── docker-compose.yml                     # Local dev: worker + Redis
-├── Makefile                               # make dev, make test, make deploy
-├── requirements.txt                       # Python dependencies
-├── pyproject.toml                         # Python project config
-├── .env.example                           # SUPABASE_URL, REDIS_URL, OPENAI_API_KEY, etc.
+├── main.py                                # Entrypoint: cleanup → Celery subprocess → consumer thread → FastAPI
+├── Dockerfile                             # Multi-stage build (python:3.12-slim, libgl for MediaPipe)
+├── .dockerignore                          # Excludes .git, tests, .env, docs from image
+├── docker-compose.yml                     # redis (7-alpine, password auth, volume) + worker
+├── Makefile                               # make dev, make up, make down, make test, make build
+├── requirements.txt                       # Python dependencies (celery, redis, fastapi, openai, Pillow, mediapipe)
+├── pyproject.toml                         # Python project config + pytest + mypy settings
+├── .env.example                           # REDIS_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY
 ├── .gitignore
 └── README.md
 ```
@@ -944,7 +967,7 @@ wearon-worker/
 ### Coherence Validation: PASS
 
 **Decision Compatibility:**
-- Three-repo architecture with clear ownership (wearon/Vercel, wearon-shopify/Shopify, wearon-worker/DigitalOcean)
+- Three-repo architecture with clear ownership (wearon/Vercel, wearon-shopify/Shopify, wearon-worker/Docker VPS)
 - Cross-language bridge uses simplest possible pattern (LPUSH/BRPOP plain JSON) — no protocol risks
 - Celery isolated to Python side only — no cross-language Celery protocol from Node.js
 - Both languages access Supabase with appropriate clients (supabase-js, supabase-py)
@@ -985,7 +1008,7 @@ wearon-worker/
 | Plugin load <2s on 3G | Preact/vanilla JS <50KB gzipped, Shopify CDN | COVERED |
 | Size rec <1s | FastAPI + MediaPipe on persistent worker, model warm in memory | COVERED |
 | Generation <10s | Existing pipeline, proxy latency budget (<100ms + <200ms + <500ms) | COVERED |
-| 99.5% API uptime | App Platform auto-restart, health checks, Vercel auto-scaling | COVERED |
+| 99.5% API uptime | Docker auto-restart, health checks, Vercel auto-scaling | COVERED |
 | WCAG 2.1 AA | Plugin UI accessibility requirements noted | COVERED (design-time) |
 | Domain-restricted API keys | middleware/api-key-auth.ts + middleware/cors.ts | COVERED |
 | 200 stores / 100 concurrent gen | Rate limiting + scaling strategy (vertical → horizontal) | COVERED |
@@ -1014,7 +1037,7 @@ wearon-worker/
 | Gap | Resolution |
 |---|---|
 | TypeScript structured logger unspecified | pino with pino-pretty for dev |
-| CI/CD pipeline undefined for new repos | Auto-deploy per repo + cross-language integration test in GitHub Actions |
+| CI/CD pipeline undefined for new repos | **IMPLEMENTED** for wearon-worker: `.github/workflows/ci-cd.yml` (test on PR, build+push GHCR + SSH deploy on main). wearon-shopify TBD. |
 | Plugin generation status polling undefined | /api/v1/generation/{id}, 2s polling interval, 60s timeout |
 | App uninstall webhook behavior undocumented | Revoke API keys, mark store inactive, cleanup queued jobs |
 
@@ -1070,7 +1093,7 @@ wearon-worker/
 - CDN for generated images
 - Health monitoring and alerting tooling (Flower, custom dashboards)
 - Multi-region deployment
-- Redis provider selection (benchmark Upstash vs DigitalOcean Managed Redis)
+- Redis provider evaluation if self-hosted becomes a bottleneck (managed Redis services vs continued self-hosting)
 
 ### Implementation Handoff
 

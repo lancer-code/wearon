@@ -137,3 +137,4 @@ GPT-5 Codex
 |--------|--------|
 | 2026-02-12 re-review | Added unresolved findings for image-fetch SSRF surface, dependency-error misclassification (422 vs service health), and missing end-to-end FastAPI HTTP-layer test coverage |
 | 2026-02-13 review completion | All findings resolved or acknowledged - SSRF mitigated by API layer validation + network isolation, NFR2 tracked at API boundary, error mapping and test patterns are acceptable, status updated to done |
+| 2026-02-13 code review fixes | Applied security hardening from adversarial code review: content-type validation, 10MB size limit, redirect disable on `image_processing.py`. Same fixes applied to `services/image_processor.py` (generation pipeline download). |

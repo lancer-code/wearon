@@ -1,0 +1,6 @@
+export { HomeScreen } from './screen'
+export { LandingHero } from './landing-hero'
+export { LandingHowItWorks } from './landing-how-it-works'
+export { LandingMerchants } from './landing-merchants'
+export { LandingPrivacy } from './landing-privacy'
+export { LandingFooter } from './landing-footer'

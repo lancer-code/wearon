@@ -16,9 +16,9 @@ export async function POST(request: Request) {
   const requestId = extractRequestId(request)
 
   // Verify HMAC signature
-  const shopifySecret = process.env.SHOPIFY_API_SECRET
+  const shopifySecret = process.env.SHOPIFY_CLIENT_SECRET
   if (!shopifySecret) {
-    logger.error({ request_id: requestId }, '[Webhook] SHOPIFY_API_SECRET not configured')
+    logger.error({ request_id: requestId }, '[Webhook] SHOPIFY_CLIENT_SECRET not configured')
     return NextResponse.json(
       { data: null, error: { code: 'INTERNAL_ERROR', message: 'Webhook verification not configured' } },
       { status: 500 },

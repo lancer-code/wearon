@@ -43,11 +43,11 @@ function base64UrlDecode(str: string): Buffer {
 }
 
 function verifySessionToken(token: string): ShopifySessionTokenPayload {
-  const apiSecret = process.env.SHOPIFY_API_SECRET
-  const apiKey = process.env.SHOPIFY_API_KEY
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET
+  const clientId = process.env.NEXT_PUBLIC_SHOPIFY_CLIENT_ID
 
-  if (!apiSecret || !apiKey) {
-    throw new Error('SHOPIFY_API_SECRET and SHOPIFY_API_KEY must be set')
+  if (!clientSecret || !clientId) {
+    throw new Error('SHOPIFY_CLIENT_SECRET and NEXT_PUBLIC_SHOPIFY_CLIENT_ID must be set')
   }
 
   const parts = token.split('.')
@@ -66,7 +66,7 @@ function verifySessionToken(token: string): ShopifySessionTokenPayload {
   // Verify signature using timing-safe comparison
   const signedContent = `${headerB64}.${payloadB64}`
   const expectedSignature = crypto
-    .createHmac('sha256', apiSecret)
+    .createHmac('sha256', clientSecret)
     .update(signedContent)
     .digest('base64url')
 
@@ -81,8 +81,8 @@ function verifySessionToken(token: string): ShopifySessionTokenPayload {
     base64UrlDecode(payloadB64!).toString('utf-8')
   )
 
-  // Verify audience matches API key
-  if (payload.aud !== apiKey) {
+  // Verify audience matches client ID
+  if (payload.aud !== clientId) {
     throw new Error('JWT audience mismatch')
   }
 

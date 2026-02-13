@@ -6,14 +6,14 @@ let shopifyInstance: ReturnType<typeof shopifyApi> | null = null
 
 function getShopifyApi() {
   if (!shopifyInstance) {
-    const apiKey = process.env.SHOPIFY_API_KEY
-    const apiSecretKey = process.env.SHOPIFY_API_SECRET
+    const apiKey = process.env.NEXT_PUBLIC_SHOPIFY_CLIENT_ID
+    const apiSecretKey = process.env.SHOPIFY_CLIENT_SECRET
     const hostName = process.env.SHOPIFY_APP_URL
     const scopes = process.env.SHOPIFY_SCOPES
 
     if (!apiKey || !apiSecretKey || !hostName || !scopes) {
       throw new Error(
-        'Missing Shopify environment variables: SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_APP_URL, SHOPIFY_SCOPES',
+        'Missing Shopify environment variables: NEXT_PUBLIC_SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, SHOPIFY_APP_URL, SHOPIFY_SCOPES',
       )
     }
 

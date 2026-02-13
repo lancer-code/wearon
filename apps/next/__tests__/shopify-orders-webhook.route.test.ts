@@ -77,7 +77,7 @@ describe('POST /api/v1/webhooks/shopify/orders', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    process.env.SHOPIFY_API_SECRET = 'test_shopify_secret'
+    process.env.SHOPIFY_CLIENT_SECRET = 'test_shopify_secret'
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
 
@@ -151,7 +151,7 @@ describe('POST /api/v1/webhooks/shopify/orders', () => {
     })
 
     const request = makeWebhookRequest(rawBody, {
-      'X-Shopify-Hmac-Sha256': makeShopifySignature(rawBody, process.env.SHOPIFY_API_SECRET!),
+      'X-Shopify-Hmac-Sha256': makeShopifySignature(rawBody, process.env.SHOPIFY_CLIENT_SECRET!),
     })
 
     const response = await POST(request)
@@ -208,7 +208,7 @@ describe('POST /api/v1/webhooks/shopify/orders', () => {
     })
 
     const request = makeWebhookRequest(rawBody, {
-      'X-Shopify-Hmac-Sha256': makeShopifySignature(rawBody, process.env.SHOPIFY_API_SECRET!),
+      'X-Shopify-Hmac-Sha256': makeShopifySignature(rawBody, process.env.SHOPIFY_CLIENT_SECRET!),
     })
 
     const response = await POST(request)
@@ -245,7 +245,7 @@ describe('POST /api/v1/webhooks/shopify/orders', () => {
     })
 
     const request = makeWebhookRequest(rawBody, {
-      'X-Shopify-Hmac-Sha256': makeShopifySignature(rawBody, process.env.SHOPIFY_API_SECRET!),
+      'X-Shopify-Hmac-Sha256': makeShopifySignature(rawBody, process.env.SHOPIFY_CLIENT_SECRET!),
     })
 
     const response = await POST(request)
@@ -282,7 +282,7 @@ describe('POST /api/v1/webhooks/shopify/orders', () => {
     })
 
     const request = makeWebhookRequest(rawBody, {
-      'X-Shopify-Hmac-Sha256': makeShopifySignature(rawBody, process.env.SHOPIFY_API_SECRET!),
+      'X-Shopify-Hmac-Sha256': makeShopifySignature(rawBody, process.env.SHOPIFY_CLIENT_SECRET!),
     })
 
     const response = await POST(request)

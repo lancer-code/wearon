@@ -22,15 +22,15 @@ describe('shopify service', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
-    process.env.SHOPIFY_API_KEY = 'test-key'
-    process.env.SHOPIFY_API_SECRET = 'test-secret'
+    process.env.NEXT_PUBLIC_SHOPIFY_CLIENT_ID = 'test-key'
+    process.env.SHOPIFY_CLIENT_SECRET = 'test-secret'
     process.env.SHOPIFY_APP_URL = 'https://app.wearon.com'
     process.env.SHOPIFY_SCOPES = 'read_products,write_products'
   })
 
   afterEach(() => {
-    delete process.env.SHOPIFY_API_KEY
-    delete process.env.SHOPIFY_API_SECRET
+    delete process.env.NEXT_PUBLIC_SHOPIFY_CLIENT_ID
+    delete process.env.SHOPIFY_CLIENT_SECRET
     delete process.env.SHOPIFY_APP_URL
     delete process.env.SHOPIFY_SCOPES
   })
@@ -58,7 +58,7 @@ describe('shopify service', () => {
   })
 
   it('throws when env vars are missing', async () => {
-    delete process.env.SHOPIFY_API_KEY
+    delete process.env.NEXT_PUBLIC_SHOPIFY_CLIENT_ID
 
     const { getShopifyApiInstance } = await import('../../src/services/shopify')
 

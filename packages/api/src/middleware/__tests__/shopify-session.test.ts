@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const TEST_API_KEY = 'test-client-id'
 const TEST_API_SECRET = 'test-api-secret-key'
 
-vi.stubEnv('SHOPIFY_API_KEY', TEST_API_KEY)
-vi.stubEnv('SHOPIFY_API_SECRET', TEST_API_SECRET)
+vi.stubEnv('NEXT_PUBLIC_SHOPIFY_CLIENT_ID', TEST_API_KEY)
+vi.stubEnv('SHOPIFY_CLIENT_SECRET', TEST_API_SECRET)
 vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co')
 vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
 

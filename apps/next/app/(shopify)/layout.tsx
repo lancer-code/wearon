@@ -4,7 +4,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: 'WearOn Ai — Shopify Admin',
   other: {
-    'shopify-api-key': process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || '',
+    'shopify-api-key': process.env.NEXT_PUBLIC_SHOPIFY_CLIENT_ID || '',
   },
 }
 

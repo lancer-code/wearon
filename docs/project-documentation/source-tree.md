@@ -12,19 +12,24 @@ wearon/
 │   │
 │   └── next/                      # [web] Next.js web application
 │       ├── app/                   # App Router pages
-│       │   ├── (auth)/            # Auth route group (login, signup)
-│       │   ├── admin/             # Admin panel routes
-│       │   │   ├── page.tsx       # Dashboard
-│       │   │   ├── users/         # User management
-│       │   │   ├── analytics/     # Analytics view
-│       │   │   ├── generations/   # Generation management
-│       │   │   ├── credits/       # Credit management
-│       │   │   └── settings/      # Settings
-│       │   ├── api/               # API routes
-│       │   │   ├── trpc/          # tRPC handler
-│       │   │   ├── auth/          # OAuth callback
-│       │   │   └── cron/          # Scheduled jobs
-│       │   └── dashboard/         # User dashboard
+│       │   ├── layout.tsx         # Root layout (bare html/body)
+│       │   ├── (main)/            # Tamagui pages (provider wrapper)
+│       │   │   ├── layout.tsx     # NextTamaguiProvider
+│       │   │   ├── (auth)/        # Auth route group (login, signup)
+│       │   │   ├── admin/         # Admin panel routes
+│       │   │   ├── dashboard/     # User dashboard
+│       │   │   └── merchant/      # Merchant pages
+│       │   ├── shopify/           # Shopify Admin pages (Polaris)
+│       │   │   ├── layout.tsx     # PolarisProvider + shopify-api-key meta
+│       │   │   ├── page.tsx       # Main Shopify admin page
+│       │   │   ├── billing/       # Billing page
+│       │   │   └── settings/      # Settings page
+│       │   └── api/               # API routes (flat, no route group)
+│       │       ├── trpc/          # tRPC handler
+│       │       ├── auth/          # Supabase OAuth callback
+│       │       ├── shopify/store/ # Shopify store API (session-token auth)
+│       │       ├── v1/            # B2B REST API
+│       │       └── cron/          # Scheduled jobs
 │       ├── proxy.ts               # Route protection middleware
 │       └── utils/supabase/        # Server-side Supabase clients
 │

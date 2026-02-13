@@ -237,9 +237,11 @@ shopify app init --template reactRouter
 - JWT-based sessions, RLS enforced
 - No changes needed for B2B expansion
 
-**B2B Merchant Authentication: Shopify OAuth**
-- Shopify OAuth flow for app installation
-- Session stored in stores table (shop domain, access token)
+**B2B Merchant Authentication: Shopify Managed Installation + Token Exchange**
+- Shopify managed installation (`use_legacy_install_flow = false`) — no OAuth callback needed
+- On first request from Shopify Admin iframe, session middleware verifies App Bridge session token (JWT)
+- If store not found, middleware performs token exchange (`shopify.auth.tokenExchange()`) to obtain offline access token
+- Store auto-provisioned in `stores` table (shop domain, AES-256 encrypted access token, API key)
 - Merchant accesses WearOn platform for onboarding/billing via separate auth (Supabase Auth account)
 
 **B2B Plugin API Authentication: Domain-Restricted API Keys**

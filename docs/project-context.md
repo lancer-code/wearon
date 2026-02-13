@@ -98,6 +98,13 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - API key never exposed in client JS — held server-side only
 - Shopper email resolved server-side via Shopify customer context
 
+**Shopify B2B Auth (WearOn platform):**
+- Managed installation (`use_legacy_install_flow = false`) — no OAuth callback
+- Embedded app uses App Bridge session token (JWT) for authentication
+- Session middleware verifies JWT, auto-provisions store via token exchange on first request
+- Token exchange: `shopify.auth.tokenExchange()` → offline access token (stored AES-256 encrypted)
+- Shopify Admin pages at `/shopify/*` use Polaris (not Tamagui), separate layout
+
 ### API Response Format
 
 **B2B REST (all `/api/v1/*` endpoints):**

@@ -2,6 +2,8 @@ import crypto from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { getAdminClient } from '../lib/supabase-admin'
 import { logger } from '../logger'
+import { exchangeTokenForOfflineAccess } from '../services/shopify'
+import { encrypt } from '../utils/encryption'
 
 export interface ShopifySessionContext {
   storeId: string
@@ -114,6 +116,59 @@ async function lookupStoreByDomain(
   return data as { id: string; shop_domain: string; status: string }
 }
 
+async function provisionStore(
+  shopDomain: string,
+  sessionToken: string
+): Promise<{ id: string; shop_domain: string; status: string } | null> {
+  try {
+    console.log('[Shopify Session] Provisioning new store for domain:', shopDomain)
+
+    const { accessToken } = await exchangeTokenForOfflineAccess(shopDomain, sessionToken)
+    const encryptedToken = encrypt(accessToken)
+    const supabase = getAdminClient()
+
+    const { data: store, error } = await supabase
+      .from('stores')
+      .insert({
+        shop_domain: shopDomain,
+        access_token_encrypted: encryptedToken,
+        status: 'active',
+        billing_mode: 'absorb_mode',
+        onboarding_completed: false,
+      })
+      .select('id, shop_domain, status')
+      .single()
+
+    if (error || !store) {
+      console.error('[Shopify Session] Store provisioning failed:', error?.message)
+      return null
+    }
+
+    // Generate API key
+    const randomHex = crypto.randomBytes(16).toString('hex')
+    const plaintext = `wk_${randomHex}`
+    const keyHash = crypto.createHash('sha256').update(plaintext).digest('hex')
+    const keyPrefix = plaintext.substring(0, 16)
+
+    await supabase.from('store_api_keys').insert({
+      store_id: store.id,
+      key_hash: keyHash,
+      key_prefix: keyPrefix,
+      allowed_domains: [`https://${shopDomain}`],
+      is_active: true,
+    })
+
+    console.log('[Shopify Session] Store provisioned successfully:', store.id, shopDomain)
+    return store as { id: string; shop_domain: string; status: string }
+  } catch (err) {
+    console.error(
+      '[Shopify Session] Token exchange / provisioning error:',
+      err instanceof Error ? err.message : String(err)
+    )
+    return null
+  }
+}
+
 export type ShopifySessionResult =
   | { context: ShopifySessionContext }
   | { error: NextResponse }
@@ -151,13 +206,19 @@ export async function authenticateShopifySession(
   }
 
   const shopDomain = extractShopDomain(payload.dest)
-  const store = await lookupStoreByDomain(shopDomain)
+  console.log('[Shopify Session] Shop domain from JWT:', shopDomain)
+
+  let store = await lookupStoreByDomain(shopDomain)
+
+  // Auto-provision: with managed installation, Shopify doesn't call the OAuth callback.
+  // The store must be created on first authenticated request via token exchange.
+  if (!store) {
+    console.log('[Shopify Session] Store not found, attempting auto-provision for:', shopDomain)
+    store = await provisionStore(shopDomain, token)
+  }
 
   if (!store) {
-    logger.warn(
-      { shopDomain },
-      '[Shopify Session] Store not found for domain'
-    )
+    console.error('[Shopify Session] Store not found and provisioning failed for:', shopDomain)
     return {
       error: NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Store not found' } },
@@ -167,10 +228,7 @@ export async function authenticateShopifySession(
   }
 
   if (store.status !== 'active') {
-    logger.warn(
-      { shopDomain, status: store.status },
-      '[Shopify Session] Store is not active'
-    )
+    console.log('[Shopify Session] Store is not active:', shopDomain, store.status)
     return {
       error: NextResponse.json(
         { error: { code: 'FORBIDDEN', message: 'Store account is not active' } },
@@ -178,6 +236,8 @@ export async function authenticateShopifySession(
       ),
     }
   }
+
+  console.log('[Shopify Session] Authenticated:', shopDomain, 'storeId:', store.id)
 
   return {
     context: {

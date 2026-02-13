@@ -96,7 +96,39 @@ User Request → tRPC → Credit Check → BullMQ Queue → Worker
                     Returned             Grant 10 Credits
 ```
 
-### 3. RBAC System
+### 3. Shopify B2B Authentication (Managed Installation)
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Shopify    │────▶│  App Bridge │────▶│  WearOn API │
+│  Admin      │     │  (iframe)   │     │  /api/shopify│
+│  Iframe     │     │  Session    │     │  /store/*   │
+└─────────────┘     │  Token JWT  │     └──────┬──────┘
+                    └─────────────┘            │
+                                               ▼
+                                    ┌─────────────────┐
+                                    │ Session Middleware│
+                                    │ Verify JWT       │
+                                    │ Store exists? ───┐
+                                    └────────┬────────┘│
+                                             │    NO   │
+                                             │         ▼
+                                        YES  │  Token Exchange
+                                             │  Auto-provision
+                                             │  Store + API Key
+                                             ▼
+                                    ┌─────────────────┐
+                                    │  Supabase       │
+                                    │  stores table   │
+                                    └─────────────────┘
+```
+
+- No OAuth callback — Shopify managed installation handles consent
+- Session token (JWT) verified via HMAC-SHA256 with client secret
+- Token exchange: `shopify.auth.tokenExchange()` → offline access token
+- Store auto-provisioned on first request if not found
+
+### 4. RBAC System
 
 ```
 user_roles ──┬── roles ──┬── role_permissions ──┬── permissions

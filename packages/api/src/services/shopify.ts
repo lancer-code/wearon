@@ -52,42 +52,21 @@ export function createShopifyClient(shopDomain: string, accessToken: string) {
   return new shopify.clients.Graphql({ session })
 }
 
-export async function beginAuth(request: Request, shopDomain: string): Promise<Response> {
-  const shopify = getShopifyApi()
-  const sanitizedShop = shopify.utils.sanitizeShop(shopDomain, true)
-  if (!sanitizedShop) {
-    throw new Error('Invalid shop domain')
-  }
 
-  return shopify.auth.begin({
-    shop: sanitizedShop,
-    callbackPath: '/api/v1/auth/shopify/callback',
-    isOnline: false,
-    rawRequest: request,
+export async function exchangeTokenForOfflineAccess(
+  shop: string,
+  sessionToken: string
+): Promise<{ accessToken: string; scope: string }> {
+  const shopify = getShopifyApi()
+  const { RequestedTokenType } = await import('@shopify/shopify-api')
+  const { session } = await shopify.auth.tokenExchange({
+    shop,
+    sessionToken,
+    requestedTokenType: RequestedTokenType.OfflineAccessToken,
   })
-}
-
-export async function completeAuth(request: Request) {
-  const shopify = getShopifyApi()
-  return shopify.auth.callback({ rawRequest: request })
-}
-
-export async function validateHmac(query: Record<string, string>): Promise<boolean> {
-  const shopify = getShopifyApi()
-  return shopify.utils.validateHmac(query)
-}
-
-export async function getShopOwnerEmail(shopDomain: string, accessToken: string): Promise<string | null> {
-  try {
-    const client = createShopifyClient(shopDomain, accessToken)
-    const response = await client.request(`{ shop { email } }`)
-    const data = response.data as { shop?: { email?: string } } | undefined
-    return data?.shop?.email || null
-  } catch (error) {
-    logger.error(
-      { err: error instanceof Error ? error.message : 'Unknown error', shop: shopDomain },
-      '[Shopify] Failed to fetch shop owner email',
-    )
-    return null
+  if (!session.accessToken) {
+    throw new Error('Token exchange returned no access token')
   }
+  return { accessToken: session.accessToken, scope: session.scope || '' }
 }
+

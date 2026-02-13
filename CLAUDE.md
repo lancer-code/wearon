@@ -82,18 +82,24 @@ apps/
   expo/          - Native iOS/Android app using Expo Router
   next/          - Web app using Next.js App Router
     app/
-      (auth)/    - Auth route group (login, signup pages)
-      admin/     - Admin panel (admin/moderator only)
-        layout.tsx      - Shared admin layout with sidebar
-        page.tsx        - Dashboard page
-        users/          - User management (admin only)
-        analytics/      - Analytics page
-        generations/    - Generations management
-        credits/        - Credits management (admin only)
-        settings/       - Settings page
-      api/       - API routes (trpc, auth callback, cron)
-      dashboard/ - Protected dashboard page
-      not-found.tsx - 404 page
+      layout.tsx   - Root layout (bare html/body, App Bridge script)
+      (main)/      - Tamagui pages (provider wrapper only, not a root layout)
+        layout.tsx   - NextTamaguiProvider wrapper
+        (auth)/      - Auth route group (login, signup pages)
+        admin/       - Admin panel (admin/moderator only)
+        dashboard/   - Protected dashboard page
+        merchant/    - Merchant onboarding and management
+      shopify/     - Shopify Admin pages (Polaris, not Tamagui)
+        layout.tsx   - PolarisProvider + shopify-api-key metadata
+        page.tsx     - Main Shopify admin page
+        billing/     - Billing page
+        settings/    - Settings page
+      api/         - API routes (flat, no route group)
+        auth/        - Supabase OAuth callback
+        shopify/store/ - Shopify store API (session-token auth)
+        trpc/        - tRPC handler
+        v1/          - B2B REST API
+        cron/        - Scheduled cleanup/churn jobs
     proxy.ts     - Route protection (auth + role checks)
     utils/supabase/ - Server-side Supabase clients
 packages/
@@ -239,6 +245,16 @@ The API is built with tRPC and Supabase, providing type-safe end-to-end API call
 - **analytics**: Platform analytics
 
 **Protected Procedures**: Use `protectedProcedure` for authenticated-only endpoints. Middleware automatically checks for valid user session.
+
+**Shopify B2B Services (`packages/api/src/services/shopify.ts`):**
+- `exchangeTokenForOfflineAccess(shop, sessionToken)` — Token exchange for managed installation
+- `createShopifyClient(shopDomain, accessToken)` — Admin GraphQL client
+
+**Shopify Session Middleware (`packages/api/src/middleware/shopify-session.ts`):**
+- Verifies App Bridge session token (JWT) via HMAC-SHA256
+- Auto-provisions store on first request via token exchange
+- Creates `stores` + `store_api_keys` records
+- Wraps API handlers with `withShopifySession(handler)`
 
 ### Client Usage
 

@@ -45,7 +45,12 @@ export function LandingFooter() {
         paddingHorizontal: '$10',
       }}
     >
-      <YStack gap="$8" width="100%" maxWidth={1200} marginHorizontal="auto">
+      <YStack
+        gap="$8"
+        width="100%"
+        maxWidth={1200}
+        marginHorizontal="auto"
+      >
         {/* Footer Grid */}
         <XStack
           gap="$8"
@@ -53,8 +58,16 @@ export function LandingFooter() {
           justifyContent="space-between"
         >
           {footerSections.map((section) => (
-            <YStack key={section.title} gap="$3" minWidth={150}>
-              <Paragraph fontSize="$5" fontWeight="600" color="$color12">
+            <YStack
+              key={section.title}
+              gap="$3"
+              minWidth={150}
+            >
+              <Paragraph
+                fontSize="$5"
+                fontWeight="600"
+                color="$color12"
+              >
                 {section.title}
               </Paragraph>
               {section.links.map((link) => (
@@ -73,8 +86,15 @@ export function LandingFooter() {
           ))}
 
           {/* Auth Links */}
-          <YStack gap="$3" minWidth={150}>
-            <Paragraph fontSize="$5" fontWeight="600" color="$color12">
+          <YStack
+            gap="$3"
+            minWidth={150}
+          >
+            <Paragraph
+              fontSize="$5"
+              fontWeight="600"
+              color="$color12"
+            >
               Account
             </Paragraph>
             <Anchor
@@ -107,10 +127,16 @@ export function LandingFooter() {
           flexWrap="wrap"
           gap="$4"
         >
-          <Paragraph fontSize="$3" color="$color9">
+          <Paragraph
+            fontSize="$3"
+            color="$color9"
+          >
             © 2026 WearOn. All rights reserved.
           </Paragraph>
-          <Paragraph fontSize="$3" color="$color9">
+          <Paragraph
+            fontSize="$3"
+            color="$color9"
+          >
             Powered by OpenAI GPT Image & MediaPipe
           </Paragraph>
         </XStack>

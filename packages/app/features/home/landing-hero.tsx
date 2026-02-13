@@ -22,7 +22,11 @@ export function LandingHero() {
       }}
     >
       {/* Headline */}
-      <YStack gap="$4" alignItems="center" maxWidth={900}>
+      <YStack
+        gap="$4"
+        alignItems="center"
+        maxWidth={900}
+      >
         <H1
           fontSize={48}
           fontWeight="800"
@@ -55,18 +59,24 @@ export function LandingHero() {
         width="100%"
         maxWidth={800}
         height={400}
-        backgroundColor="$color3"
+        backgroundColor="#f0f1f3"
         borderRadius="$4"
         justifyContent="center"
         alignItems="center"
         borderWidth={2}
         borderColor="$color6"
         borderStyle="dashed"
+        position="relative"
+        zIndex={1}
         $gtSm={{
           height: 500,
         }}
       >
-        <Paragraph color="$color8" fontSize="$5" textAlign="center">
+        <Paragraph
+          color="$color8"
+          fontSize="$5"
+          textAlign="center"
+        >
           Before/After Comparison
           {'\n'}
           (Visual proof goes here)

@@ -2,8 +2,10 @@
 
 import { YStack, XStack, H2, Paragraph, Button } from '@my/ui'
 import { Check } from '@tamagui/lucide-icons'
+import { useLink } from 'solito/navigation'
 
 export function LandingMerchants() {
+  const onboardingLink = useLink({ href: '/merchant/onboarding' })
   const benefits = [
     'Reduce returns by up to 30%',
     'Increase conversion with visual confidence',
@@ -49,9 +51,21 @@ export function LandingMerchants() {
           {/* Benefits */}
           <YStack gap="$3">
             {benefits.map((benefit, index) => (
-              <XStack key={index} gap="$3" alignItems="center">
-                <Check size={24} color="$green10" strokeWidth={3} />
-                <Paragraph fontSize="$5" lineHeight={1.6} color="$color11">
+              <XStack
+                key={index}
+                gap="$3"
+                alignItems="center"
+              >
+                <Check
+                  size={24}
+                  color="$green10"
+                  strokeWidth={3}
+                />
+                <Paragraph
+                  fontSize="$5"
+                  lineHeight={1.6}
+                  color="$color11"
+                >
                   {benefit}
                 </Paragraph>
               </XStack>
@@ -60,6 +74,7 @@ export function LandingMerchants() {
 
           {/* CTA */}
           <Button
+            {...onboardingLink}
             size="$5"
             backgroundColor="$blue10"
             color="white"
@@ -69,12 +84,6 @@ export function LandingMerchants() {
             pressStyle={{ backgroundColor: '$blue11' }}
             alignSelf="flex-start"
             marginTop="$4"
-            onPress={() => {
-              // TODO: Link to Shopify App Store
-              if (typeof window !== 'undefined') {
-                window.open('https://apps.shopify.com', '_blank')
-              }
-            }}
           >
             Install on Shopify
           </Button>
@@ -93,7 +102,12 @@ export function LandingMerchants() {
           borderColor="$color7"
           borderStyle="dashed"
         >
-          <Paragraph color="$color9" fontSize="$5" textAlign="center" paddingHorizontal="$4">
+          <Paragraph
+            color="$color9"
+            fontSize="$5"
+            textAlign="center"
+            paddingHorizontal="$4"
+          >
             Shopify Dashboard Screenshot
             {'\n'}
             (Widget preview goes here)

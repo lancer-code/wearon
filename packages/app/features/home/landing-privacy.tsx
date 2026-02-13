@@ -38,7 +38,12 @@ export function LandingPrivacy() {
         paddingHorizontal: '$10',
       }}
     >
-      <YStack gap="$10" width="100%" maxWidth={1200} alignItems="center">
+      <YStack
+        gap="$10"
+        width="100%"
+        maxWidth={1200}
+        alignItems="center"
+      >
         {/* Heading */}
         <H2
           fontSize={36}
@@ -66,18 +71,26 @@ export function LandingPrivacy() {
                 key={index}
                 padding="$6"
                 width="100%"
-                maxWidth={280}
+                maxWidth={360}
                 backgroundColor="$color2"
                 borderRadius="$4"
                 borderWidth={1}
                 borderColor="$color5"
                 $gtSm={{
                   flexBasis: '22%',
+                  minWidth: 240,
                 }}
               >
-                <YStack gap="$3" alignItems="center">
+                <YStack
+                  gap="$3"
+                  alignItems="center"
+                >
                   {/* Icon */}
-                  <Icon size={48} color="$blue9" strokeWidth={1.5} />
+                  <Icon
+                    size={48}
+                    color="$blue9"
+                    strokeWidth={1.5}
+                  />
 
                   {/* Title */}
                   <Paragraph

@@ -1,7 +1,7 @@
 'use client'
 
 import { YStack, XStack, H2, Paragraph, Card, Button } from '@my/ui'
-import { Camera, Ruler, Sparkles } from '@tamagui/lucide-icons'
+import { Upload, Ruler, Sparkles } from '@tamagui/lucide-icons'
 import { useLink } from 'solito/navigation'
 
 export function LandingHowItWorks() {
@@ -10,9 +10,9 @@ export function LandingHowItWorks() {
   const steps = [
     {
       number: 1,
-      icon: Camera,
+      icon: Upload,
       title: 'Upload Photo',
-      description: 'Take a quick selfie or upload a photo',
+      description: 'Upload a full-body photo of yourself',
     },
     {
       number: 2,
@@ -39,7 +39,12 @@ export function LandingHowItWorks() {
         paddingHorizontal: '$10',
       }}
     >
-      <YStack gap="$10" width="100%" maxWidth={1200} alignItems="center">
+      <YStack
+        gap="$10"
+        width="100%"
+        maxWidth={1200}
+        alignItems="center"
+      >
         {/* Heading */}
         <H2
           fontSize={36}
@@ -75,7 +80,10 @@ export function LandingHowItWorks() {
                   flexBasis: '30%',
                 }}
               >
-                <YStack gap="$4" alignItems="center">
+                <YStack
+                  gap="$4"
+                  alignItems="center"
+                >
                   {/* Number Badge */}
                   <YStack
                     width={48}
@@ -95,7 +103,10 @@ export function LandingHowItWorks() {
                   </YStack>
 
                   {/* Icon */}
-                  <Icon size={64} color="$blue10" />
+                  <Icon
+                    size={64}
+                    color="$blue10"
+                  />
 
                   {/* Title */}
                   <Paragraph

@@ -71,6 +71,8 @@ export default function ShopifyDashboard() {
     loadData()
   }, [api])
 
+  const [newPlaintextKey, setNewPlaintextKey] = useState<string | null>(null)
+
   const handleRegenerateKey = useCallback(async () => {
     const confirmed = window.confirm(
       apiKey?.maskedKey
@@ -81,11 +83,18 @@ export default function ShopifyDashboard() {
 
     try {
       const result = await api.post<{ apiKey: string }>('/api-key/regenerate')
+      setNewPlaintextKey(result.apiKey)
       setApiKey({ maskedKey: `${result.apiKey.substring(0, 16)}...****`, createdAt: new Date().toISOString() })
     } catch {
       setError('Failed to regenerate API key')
     }
   }, [api, apiKey?.maskedKey])
+
+  const handleCopyKey = useCallback(() => {
+    if (newPlaintextKey) {
+      navigator.clipboard.writeText(newPlaintextKey)
+    }
+  }, [newPlaintextKey])
 
   if (loading) {
     return (
@@ -213,6 +222,16 @@ export default function ShopifyDashboard() {
                 <Text as="h2" variant="headingMd">
                   API Key
                 </Text>
+                {newPlaintextKey ? (
+                  <Banner tone="warning" title="Save your API key now" onDismiss={() => setNewPlaintextKey(null)}>
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodyMd">
+                        This is the only time your full API key will be shown. Copy it now.
+                      </Text>
+                      <code style={{ wordBreak: 'break-all', fontSize: 13 }}>{newPlaintextKey}</code>
+                    </BlockStack>
+                  </Banner>
+                ) : null}
                 {apiKey?.maskedKey ? (
                   <BlockStack gap="200">
                     <Text as="p" variant="bodyMd">
@@ -228,6 +247,11 @@ export default function ShopifyDashboard() {
                   </Text>
                 )}
                 <InlineStack gap="300">
+                  {newPlaintextKey && (
+                    <Button variant="primary" onClick={handleCopyKey}>
+                      Copy API key
+                    </Button>
+                  )}
                   <Button onClick={handleRegenerateKey}>
                     {apiKey?.maskedKey ? 'Regenerate API key' : 'Generate API key'}
                   </Button>

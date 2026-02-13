@@ -113,12 +113,12 @@ function extractShopDomain(dest: string): string {
 
 async function lookupStoreByDomain(
   shopDomain: string
-): Promise<{ id: string; shop_domain: string } | null> {
+): Promise<{ id: string; shop_domain: string; status: string } | null> {
   const supabase = getServiceClient()
 
   const { data, error } = await supabase
     .from('stores')
-    .select('id, shop_domain')
+    .select('id, shop_domain, status')
     .eq('shop_domain', shopDomain)
     .single()
 
@@ -126,7 +126,7 @@ async function lookupStoreByDomain(
     return null
   }
 
-  return data as { id: string; shop_domain: string }
+  return data as { id: string; shop_domain: string; status: string }
 }
 
 export type ShopifySessionResult =

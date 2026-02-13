@@ -358,6 +358,21 @@ export async function regenerateApiKey(storeId: string, shopDomain: string) {
   const keyHash = crypto.createHash('sha256').update(plaintext).digest('hex')
   const keyPrefix = plaintext.substring(0, 16)
 
+  // Deactivate old keys FIRST to prevent multiple active keys coexisting
+  const { error: deactivateError } = await supabase
+    .from('store_api_keys')
+    .update({ is_active: false })
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+
+  if (deactivateError) {
+    logger.error(
+      { store_id: storeId, err: deactivateError.message },
+      '[MerchantOps] Failed to deactivate old keys before regeneration'
+    )
+    throw new MerchantOpsError('Failed to regenerate API key', 'INTERNAL_ERROR')
+  }
+
   const { error: insertError } = await supabase.from('store_api_keys').insert({
     store_id: storeId,
     key_hash: keyHash,
@@ -372,19 +387,6 @@ export async function regenerateApiKey(storeId: string, shopDomain: string) {
       '[MerchantOps] API key regeneration failed at insert step'
     )
     throw new MerchantOpsError('Failed to regenerate API key', 'INTERNAL_ERROR')
-  }
-
-  const { error: deactivateError } = await supabase
-    .from('store_api_keys')
-    .update({ is_active: false })
-    .eq('store_id', storeId)
-    .neq('key_hash', keyHash)
-
-  if (deactivateError) {
-    logger.warn(
-      { store_id: storeId, err: deactivateError.message },
-      '[MerchantOps] Failed to deactivate old keys after regeneration (non-fatal)'
-    )
   }
 
   logger.info({ store_id: storeId }, '[MerchantOps] API key regenerated')

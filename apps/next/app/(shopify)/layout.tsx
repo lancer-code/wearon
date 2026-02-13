@@ -8,14 +8,27 @@ export const metadata: Metadata = {
 export default function ShopifyRootLayout({ children }: { children: ReactNode }) {
   const apiKey = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || ''
 
+  // Inline script checks for shop/host params before loading App Bridge.
+  // This prevents the "missing required configuration fields: shop" console error
+  // when the page is accessed directly outside the Shopify admin iframe.
+  const bootstrapScript = `
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      if (params.has('shop') || params.has('host')) {
+        var s = document.createElement('script');
+        s.src = 'https://cdn.shopify.com/shopifycloud/app-bridge.js?apiKey=${apiKey}';
+        s.dataset.apiKey = '${apiKey}';
+        document.head.appendChild(s);
+      }
+    })();
+  `
+
   return (
     <html lang="en">
       <head>
-        {/* App Bridge v4 MUST be the first script in the document */}
-        <script
-          src={`https://cdn.shopify.com/shopifycloud/app-bridge.js?apiKey=${apiKey}`}
-          data-api-key={apiKey}
-        />
+        {apiKey && (
+          <script dangerouslySetInnerHTML={{ __html: bootstrapScript }} />
+        )}
       </head>
       <body style={{ margin: 0 }}>{children}</body>
     </html>

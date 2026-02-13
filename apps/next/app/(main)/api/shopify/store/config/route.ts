@@ -41,10 +41,11 @@ async function handlePatch(request: Request, context: ShopifySessionContext) {
     if (
       typeof retailCreditPrice !== 'number' ||
       !Number.isFinite(retailCreditPrice) ||
-      retailCreditPrice <= 0
+      retailCreditPrice <= 0 ||
+      retailCreditPrice > 100
     ) {
       return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'retail_credit_price must be a positive number when billing_mode is resell_mode' } },
+        { error: { code: 'VALIDATION_ERROR', message: 'retail_credit_price must be a positive number up to $100 when billing_mode is resell_mode' } },
         { status: 400 }
       )
     }

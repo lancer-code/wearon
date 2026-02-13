@@ -83,6 +83,17 @@ export default function ShopifyBillingPage() {
     loadData()
   }, [api])
 
+  // Refresh data when returning from external checkout (Paddle redirect)
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible' && loadedRef.current) {
+        reloadAllData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [reloadAllData])
+
   const handleSubscribe = useCallback(
     async (tier: string) => {
       setActionLoading(tier)
@@ -103,21 +114,32 @@ export default function ShopifyBillingPage() {
     [api]
   )
 
+  const reloadAllData = useCallback(async () => {
+    try {
+      const [catalogRes, overageRes] = await Promise.all([
+        api.get<BillingCatalog>('/billing-catalog'),
+        api.get<OverageEntry[]>('/overage'),
+      ])
+      setCatalog(catalogRes)
+      setOverageHistory(overageRes)
+    } catch {
+      // Silent reload failure — stale data is acceptable
+    }
+  }, [api])
+
   const handleChangePlan = useCallback(
     async (targetTier: string) => {
       setActionLoading(`change-${targetTier}`)
       try {
         await api.post('/change-plan', { targetTier })
-        // Reload billing data
-        const catalogRes = await api.get<BillingCatalog>('/billing-catalog')
-        setCatalog(catalogRes)
+        await reloadAllData()
       } catch {
         setError('Failed to change plan')
       } finally {
         setActionLoading(null)
       }
     },
-    [api]
+    [api, reloadAllData]
   )
 
   const handlePaygPurchase = useCallback(async () => {

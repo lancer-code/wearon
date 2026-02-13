@@ -54,9 +54,9 @@ const CREATE_CREDIT_PRODUCT_MUTATION = `
 `
 
 const UPDATE_VARIANT_PRICE_MUTATION = `
-  mutation productVariantUpdate($input: ProductVariantInput!) {
-    productVariantUpdate(input: $input) {
-      productVariant {
+  mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+    productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+      productVariants {
         id
       }
       userErrors {
@@ -177,7 +177,7 @@ async function createCreditProduct(
     throw new Error('Shopify productCreate did not return product or variant id')
   }
 
-  await updateVariantPrice(client, variantGid, retailCreditPrice)
+  await updateVariantPrice(client, productGid, variantGid, retailCreditPrice)
 
   return {
     productId: extractNumericId(productGid),
@@ -188,30 +188,34 @@ async function createCreditProduct(
 
 async function updateVariantPrice(
   client: ReturnType<typeof createShopifyClient>,
+  productId: string,
   variantId: string,
   retailCreditPrice: number,
 ): Promise<void> {
-  type ProductVariantUpdateResponse = {
-    productVariantUpdate?: {
-      productVariant?: { id: string } | null
+  type ProductVariantsBulkUpdateResponse = {
+    productVariantsBulkUpdate?: {
+      productVariants?: Array<{ id: string }> | null
       userErrors?: ShopifyUserError[] | null
     } | null
   }
 
-  const response = await client.request<ProductVariantUpdateResponse>(UPDATE_VARIANT_PRICE_MUTATION, {
+  const response = await client.request<ProductVariantsBulkUpdateResponse>(UPDATE_VARIANT_PRICE_MUTATION, {
     variables: {
-      input: {
-        id: toVariantGid(variantId),
-        price: formatPrice(retailCreditPrice),
-      },
+      productId: toProductGid(productId),
+      variants: [
+        {
+          id: toVariantGid(variantId),
+          price: formatPrice(retailCreditPrice),
+        },
+      ],
     },
   })
   const payload = response.data
-  const productVariantUpdate = payload?.productVariantUpdate
-  throwOnUserErrors('productVariantUpdate', productVariantUpdate?.userErrors)
+  const bulkUpdate = payload?.productVariantsBulkUpdate
+  throwOnUserErrors('productVariantsBulkUpdate', bulkUpdate?.userErrors)
 
-  if (!productVariantUpdate?.productVariant?.id) {
-    throw new Error('Shopify productVariantUpdate did not return variant id')
+  if (!bulkUpdate?.productVariants?.length) {
+    throw new Error('Shopify productVariantsBulkUpdate did not return variant ids')
   }
 }
 
@@ -306,7 +310,7 @@ export async function ensureHiddenTryOnCreditProduct(
       { shopDomain: params.shopDomain, productId: existingProductId },
       '[Shopify Credit Product] Updating existing product price',
     )
-    await updateVariantPrice(shopifyClient, existingVariantId, params.retailCreditPrice)
+    await updateVariantPrice(shopifyClient, existingProductId, existingVariantId, params.retailCreditPrice)
     return {
       shopifyProductId: existingProductId,
       shopifyVariantId: existingVariantId,
@@ -320,7 +324,7 @@ export async function ensureHiddenTryOnCreditProduct(
     )
     const reconciledVariantId = await getProductVariant(shopifyClient, existingProductId)
     if (reconciledVariantId) {
-      await updateVariantPrice(shopifyClient, reconciledVariantId, params.retailCreditPrice)
+      await updateVariantPrice(shopifyClient, existingProductId, reconciledVariantId, params.retailCreditPrice)
       return {
         shopifyProductId: existingProductId,
         shopifyVariantId: reconciledVariantId,

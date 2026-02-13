@@ -44,8 +44,8 @@ describe('shopify credit product service', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          productVariantUpdate: {
-            productVariant: { id: 'gid://shopify/ProductVariant/444555666' },
+          productVariantsBulkUpdate: {
+            productVariants: [{ id: 'gid://shopify/ProductVariant/444555666' }],
             userErrors: [],
           },
         },
@@ -86,7 +86,7 @@ describe('shopify credit product service', () => {
     expect(mockCreateShopifyClient).toHaveBeenCalledWith('shop.myshopify.com', 'decrypted-access-token')
     expect(mockClientRequest).toHaveBeenCalledTimes(4)
     expect(mockClientRequest.mock.calls[0]?.[0]).toContain('mutation productCreate')
-    expect(mockClientRequest.mock.calls[1]?.[0]).toContain('mutation productVariantUpdate')
+    expect(mockClientRequest.mock.calls[1]?.[0]).toContain('mutation productVariantsBulkUpdate')
     expect(mockClientRequest.mock.calls[2]?.[0]).toContain('query publications')
     expect(mockClientRequest.mock.calls[3]?.[0]).toContain('mutation publishableUnpublish')
   })
@@ -94,8 +94,8 @@ describe('shopify credit product service', () => {
   it('updates existing variant price without creating a new product', async () => {
     mockClientRequest.mockResolvedValueOnce({
       data: {
-        productVariantUpdate: {
-          productVariant: { id: 'gid://shopify/ProductVariant/999888777' },
+        productVariantsBulkUpdate: {
+          productVariants: [{ id: 'gid://shopify/ProductVariant/999888777' }],
           userErrors: [],
         },
       },
@@ -116,13 +116,16 @@ describe('shopify credit product service', () => {
       shopifyVariantId: '999888777',
     })
     expect(mockClientRequest).toHaveBeenCalledTimes(1)
-    expect(mockClientRequest.mock.calls[0]?.[0]).toContain('mutation productVariantUpdate')
+    expect(mockClientRequest.mock.calls[0]?.[0]).toContain('mutation productVariantsBulkUpdate')
     expect(mockClientRequest.mock.calls[0]?.[1]).toEqual({
       variables: {
-        input: {
-          id: 'gid://shopify/ProductVariant/999888777',
-          price: '0.75',
-        },
+        productId: 'gid://shopify/Product/333222111',
+        variants: [
+          {
+            id: 'gid://shopify/ProductVariant/999888777',
+            price: '0.75',
+          },
+        ],
       },
     })
   })
@@ -144,8 +147,8 @@ describe('shopify credit product service', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          productVariantUpdate: {
-            productVariant: { id: 'gid://shopify/ProductVariant/444555666' },
+          productVariantsBulkUpdate: {
+            productVariants: [{ id: 'gid://shopify/ProductVariant/444555666' }],
             userErrors: [],
           },
         },
@@ -184,8 +187,8 @@ describe('shopify credit product service', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          productVariantUpdate: {
-            productVariant: { id: 'gid://shopify/ProductVariant/999888777' },
+          productVariantsBulkUpdate: {
+            productVariants: [{ id: 'gid://shopify/ProductVariant/999888777' }],
             userErrors: [],
           },
         },
@@ -207,7 +210,7 @@ describe('shopify credit product service', () => {
     })
     expect(mockClientRequest).toHaveBeenCalledTimes(2)
     expect(mockClientRequest.mock.calls[0]?.[0]).toContain('query getProduct')
-    expect(mockClientRequest.mock.calls[1]?.[0]).toContain('mutation productVariantUpdate')
+    expect(mockClientRequest.mock.calls[1]?.[0]).toContain('mutation productVariantsBulkUpdate')
   })
 
   it('creates new product when partial state cannot be reconciled', async () => {
@@ -232,8 +235,8 @@ describe('shopify credit product service', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          productVariantUpdate: {
-            productVariant: { id: 'gid://shopify/ProductVariant/888999000' },
+          productVariantsBulkUpdate: {
+            productVariants: [{ id: 'gid://shopify/ProductVariant/888999000' }],
             userErrors: [],
           },
         },
@@ -287,8 +290,8 @@ describe('shopify credit product service', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          productVariantUpdate: {
-            productVariant: { id: 'gid://shopify/ProductVariant/444555666' },
+          productVariantsBulkUpdate: {
+            productVariants: [{ id: 'gid://shopify/ProductVariant/444555666' }],
             userErrors: [],
           },
         },

@@ -25,7 +25,7 @@ function getShopifyApi() {
       scopes: scopes.split(',').map((s) => s.trim()),
       hostName: cleanHost,
       apiVersion: ApiVersion.January26,
-      isEmbeddedApp: false,
+      isEmbeddedApp: true,
     })
 
     logger.info('[Shopify] API client initialized')

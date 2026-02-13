@@ -12,6 +12,7 @@ module.exports = {
     'expo-linking',
     'expo-constants',
     'expo-modules-core',
+    '@shopify/polaris',
   ],
   experimental: {
     scrollRestoration: true,
@@ -23,4 +24,26 @@ module.exports = {
     },
   },
   serverExternalPackages: ['pino', 'pino-pretty'],
+  async headers() {
+    return [
+      {
+        source: '/shopify/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors https://*.myshopify.com https://admin.shopify.com;",
+          },
+        ],
+      },
+      {
+        source: '/api/shopify/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors https://*.myshopify.com https://admin.shopify.com;",
+          },
+        ],
+      },
+    ]
+  },
 }

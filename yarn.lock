@@ -1039,7 +1039,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babel/runtime@npm:^7.18.6, @babel/runtime@npm:^7.20.0, @babel/runtime@npm:^7.24.6, @babel/runtime@npm:^7.25.0, @babel/runtime@npm:^7.25.4, @babel/runtime@npm:^7.26.0":
+"@babel/runtime@npm:^7.18.6, @babel/runtime@npm:^7.20.0, @babel/runtime@npm:^7.24.6, @babel/runtime@npm:^7.25.0, @babel/runtime@npm:^7.25.4, @babel/runtime@npm:^7.26.0, @babel/runtime@npm:^7.5.5, @babel/runtime@npm:^7.8.7":
   version: 7.28.6
   resolution: "@babel/runtime@npm:7.28.6"
   checksum: 10/fbcd439cb74d4a681958eb064c509829e3f46d8a4bfaaf441baa81bb6733d1e680bccc676c813883d7741bcaada1d0d04b15aa320ef280b5734e2192b50decf9
@@ -4569,10 +4569,85 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@shopify/app-bridge-core@npm:1.5.0":
+  version: 1.5.0
+  resolution: "@shopify/app-bridge-core@npm:1.5.0"
+  checksum: 10/df269b61f82cffc9a48f7debef93e6b0fe26ee2a6a48c98aa073ae7a1e4336844b0e9547e4c8dc5a91a55cb1c50e859bd73d7d1ceb81a6048f651ba8044fc8df
+  languageName: node
+  linkType: hard
+
+"@shopify/app-bridge-react@npm:^4.2.10":
+  version: 4.2.10
+  resolution: "@shopify/app-bridge-react@npm:4.2.10"
+  dependencies:
+    "@shopify/app-bridge-types": "npm:0.7.0"
+  peerDependencies:
+    react: "*"
+    react-dom: "*"
+  checksum: 10/53e7b9c42c7ef7d02e53debb3e42cc9a8726a404fbfdc73a7f3732efe67756ec2528979ca0fc82e438e670d5393c2a3302e55c9dbeb676759ab4de6c79b877c7
+  languageName: node
+  linkType: hard
+
+"@shopify/app-bridge-types@npm:0.7.0":
+  version: 0.7.0
+  resolution: "@shopify/app-bridge-types@npm:0.7.0"
+  dependencies:
+    "@standard-schema/spec": "npm:^1.0.0"
+  checksum: 10/10ec3a05a000a2fff860ccad6616e5c0c989bbc8e0068177403d40a37a1323b5e5f8cd50b8c5923c3ef24417ee248564bc0212c5ae3b821e4afc8c41ec131707
+  languageName: node
+  linkType: hard
+
+"@shopify/app-bridge@npm:^3.7.11":
+  version: 3.7.11
+  resolution: "@shopify/app-bridge@npm:3.7.11"
+  dependencies:
+    "@shopify/app-bridge-core": "npm:1.5.0"
+    base64url: "npm:^3.0.1"
+    web-vitals: "npm:^3.0.1"
+  checksum: 10/6e904ffbb8c752ed5f50286248c283517181cfca2e0914e1f2f7529ff74eb078bcadf3b3e5d533355b0b8d1701b03e6de7ab593520a5a1c99e1b4a465be0e3f5
+  languageName: node
+  linkType: hard
+
 "@shopify/graphql-client@npm:^1.4.1":
   version: 1.4.1
   resolution: "@shopify/graphql-client@npm:1.4.1"
   checksum: 10/92ac902c5b7cfc38eae708efba80299375f3133dd04595b54dd696919eabd2b862fba0491565bf3b506f2378e23da58e2e7bc3f3a5f3154e4641f03cf83857bc
+  languageName: node
+  linkType: hard
+
+"@shopify/polaris-icons@npm:^9.3.1":
+  version: 9.3.1
+  resolution: "@shopify/polaris-icons@npm:9.3.1"
+  peerDependencies:
+    react: "*"
+  checksum: 10/9ab5aaed59312e2fee19f32fcf61d6946a5084a95f6c984440ec12d32c056c6e498b5361bfc8dd5480f41017e8ee8f8743c1c678135d716b2def11b5f56143e4
+  languageName: node
+  linkType: hard
+
+"@shopify/polaris-tokens@npm:^9.4.2":
+  version: 9.4.2
+  resolution: "@shopify/polaris-tokens@npm:9.4.2"
+  dependencies:
+    deepmerge: "npm:^4.3.1"
+  checksum: 10/69b30ca66ab602da8a8f8858ac011ead90893e1a0a80016c5e4a64a95e06c00708ae8f62a2045e126653109ca3ea4ec892d6f93cd8734d43af1dd83c17bc34e9
+  languageName: node
+  linkType: hard
+
+"@shopify/polaris@npm:^13.9.5":
+  version: 13.9.5
+  resolution: "@shopify/polaris@npm:13.9.5"
+  dependencies:
+    "@shopify/polaris-icons": "npm:^9.3.1"
+    "@shopify/polaris-tokens": "npm:^9.4.2"
+    "@types/react": "npm:*"
+    "@types/react-dom": "npm:*"
+    "@types/react-transition-group": "npm:^4.4.2"
+    react-fast-compare: "npm:^3.2.0"
+    react-transition-group: "npm:^4.4.2"
+  peerDependencies:
+    react: ^18.0.0
+    react-dom: ^18.0.0
+  checksum: 10/295a58927ce455e6529e74737cb0e2accfd342abc75058e0b7f047d0e369a53ca6b90d04de780da54123b429350fff804b30133f8148dd82640d57573c48fca4
   languageName: node
   linkType: hard
 
@@ -4630,6 +4705,13 @@ __metadata:
   dependencies:
     "@sinonjs/commons": "npm:^3.0.0"
   checksum: 10/78155c7bd866a85df85e22028e046b8d46cf3e840f72260954f5e3ed5bd97d66c595524305a6841ffb3f681a08f6e5cef572a2cce5442a8a232dc29fb409b83e
+  languageName: node
+  linkType: hard
+
+"@standard-schema/spec@npm:^1.0.0":
+  version: 1.1.0
+  resolution: "@standard-schema/spec@npm:1.1.0"
+  checksum: 10/a209615c9e8b2ea535d7db0a5f6aa0f962fd4ab73ee86a46c100fb78116964af1f55a27c1794d4801e534a196794223daa25ff5135021e03c7828aa3d95e1763
   languageName: node
   linkType: hard
 
@@ -6906,12 +6988,39 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/react-dom@npm:*":
+  version: 19.2.3
+  resolution: "@types/react-dom@npm:19.2.3"
+  peerDependencies:
+    "@types/react": ^19.2.0
+  checksum: 10/616c4a8aee250ea05fb1e7b98e7e00475dd3a6c1c30d7be18b4b93caba832f4203106b3a496a6b147e5acc2da14575eca47bce234c633bca1f8430ef8ffb234a
+  languageName: node
+  linkType: hard
+
 "@types/react-native@npm:^0.73.0":
   version: 0.73.0
   resolution: "@types/react-native@npm:0.73.0"
   dependencies:
     react-native: "npm:*"
   checksum: 10/a764ca5d876dae3c109da449f736c44271b3b236d0d6e836c078247af1419f6d851600c56bb0c26f3e0d1b4be6eaac56b65c1f74ad0f0d05baf8b65dd1d5c597
+  languageName: node
+  linkType: hard
+
+"@types/react-transition-group@npm:^4.4.2":
+  version: 4.4.12
+  resolution: "@types/react-transition-group@npm:4.4.12"
+  peerDependencies:
+    "@types/react": "*"
+  checksum: 10/ea14bc84f529a3887f9954b753843820ac8a3c49fcdfec7840657ecc6a8800aad98afdbe4b973eb96c7252286bde38476fcf64b1c09527354a9a9366e516d9a2
+  languageName: node
+  linkType: hard
+
+"@types/react@npm:*":
+  version: 19.2.14
+  resolution: "@types/react@npm:19.2.14"
+  dependencies:
+    csstype: "npm:^3.2.2"
+  checksum: 10/fbff239089ee64b6bd9b00543594db498278b06de527ef1b0f71bb0eb09cc4445a71b5dd3c0d3d0257255c4eed94406be40a74ad4a987ade8a8d5dd65c82bc5f
   languageName: node
   linkType: hard
 
@@ -8199,6 +8308,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"base64url@npm:^3.0.1":
+  version: 3.0.1
+  resolution: "base64url@npm:3.0.1"
+  checksum: 10/a77b2a3a526b3343e25be424de3ae0aa937d78f6af7c813ef9020ef98001c0f4e2323afcd7d8b2d2978996bf8c42445c3e9f60c218c622593e5fdfd54a3d6e18
+  languageName: node
+  linkType: hard
+
 "baseline-browser-mapping@npm:^2.8.3, baseline-browser-mapping@npm:^2.9.0, baseline-browser-mapping@npm:^2.9.11":
   version: 2.9.19
   resolution: "baseline-browser-mapping@npm:2.9.19"
@@ -9315,7 +9431,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"csstype@npm:^3.0.2":
+"csstype@npm:^3.0.2, csstype@npm:^3.2.2":
   version: 3.2.3
   resolution: "csstype@npm:3.2.3"
   checksum: 10/ad41baf7e2ffac65ab544d79107bf7cd1a4bb9bab9ac3302f59ab4ba655d5e30942a8ae46e10ba160c6f4ecea464cc95b975ca2fefbdeeacd6ac63f12f99fe1f
@@ -9520,6 +9636,16 @@ __metadata:
   dependencies:
     utila: "npm:~0.4"
   checksum: 10/71b22f56bce6255a963694a72860a99f08763cf500f02ff38ce4c7489f95b07e7a0069f10b04c7d200e21375474abe01232833ca1600f104bdee7173e493a5b9
+  languageName: node
+  linkType: hard
+
+"dom-helpers@npm:^5.0.1":
+  version: 5.2.1
+  resolution: "dom-helpers@npm:5.2.1"
+  dependencies:
+    "@babel/runtime": "npm:^7.8.7"
+    csstype: "npm:^3.0.2"
+  checksum: 10/bed2341adf8864bf932b3289c24f35fdd99930af77df46688abf2d753ff291df49a15850c874d686d9be6ec4e1c6835673906e64dbd8b2839d227f117a11fd41
   languageName: node
   linkType: hard
 
@@ -14056,6 +14182,9 @@ __metadata:
   resolution: "next-app@workspace:apps/next"
   dependencies:
     "@playwright/test": "npm:^1.57.0"
+    "@shopify/app-bridge": "npm:^3.7.11"
+    "@shopify/app-bridge-react": "npm:^4.2.10"
+    "@shopify/polaris": "npm:^13.9.5"
     "@supabase/ssr": "npm:^0.5.2"
     "@supabase/supabase-js": "npm:^2.48.1"
     "@tamagui/config": "npm:^1.143.1"
@@ -15373,7 +15502,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"prop-types@npm:^15.8.1":
+"prop-types@npm:^15.6.2, prop-types@npm:^15.8.1":
   version: 15.8.1
   resolution: "prop-types@npm:15.8.1"
   dependencies:
@@ -15582,7 +15711,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-fast-compare@npm:^3.2.2":
+"react-fast-compare@npm:^3.2.0, react-fast-compare@npm:^3.2.2":
   version: 3.2.2
   resolution: "react-fast-compare@npm:3.2.2"
   checksum: 10/a6826180ba75cefba1c8d3ac539735f9b627ca05d3d307fe155487f5d0228d376dac6c9708d04a283a7b9f9aee599b637446635b79c8c8753d0b4eece56c125c
@@ -15868,6 +15997,21 @@ __metadata:
   version: 0.14.2
   resolution: "react-refresh@npm:0.14.2"
   checksum: 10/512abf97271ab8623486061be04b608c39d932e3709f9af1720b41573415fa4993d0009fa5138b6705b60a98f4102f744d4e26c952b14f41a0e455521c6be4cc
+  languageName: node
+  linkType: hard
+
+"react-transition-group@npm:^4.4.2":
+  version: 4.4.5
+  resolution: "react-transition-group@npm:4.4.5"
+  dependencies:
+    "@babel/runtime": "npm:^7.5.5"
+    dom-helpers: "npm:^5.0.1"
+    loose-envify: "npm:^1.4.0"
+    prop-types: "npm:^15.6.2"
+  peerDependencies:
+    react: ">=16.6.0"
+    react-dom: ">=16.6.0"
+  checksum: 10/ca32d3fd2168c976c5d90a317f25d5f5cd723608b415fb3b9006f9d793c8965c619562d0884503a3e44e4b06efbca4fdd1520f30e58ca3e00a0890e637d55419
   languageName: node
   linkType: hard
 
@@ -18476,6 +18620,13 @@ __metadata:
   version: 0.2.4
   resolution: "web-vitals@npm:0.2.4"
   checksum: 10/e0f1873ea321d484f4ea904a07bb3c1481a2bb049a26c65c22fabdbf648c73f48c49ecc580875a5e2942d244821c09b93371d5e18872815f2cbdc2370cba532f
+  languageName: node
+  linkType: hard
+
+"web-vitals@npm:^3.0.1":
+  version: 3.5.2
+  resolution: "web-vitals@npm:3.5.2"
+  checksum: 10/59c5d7775c32977eb9156d186113f4de66c235cfea7a113d2f430ef25db25a5efe1980d2ba466f7ceefc7b1a3847764933dc1567b6d9b8f340d12e75209e3f79
   languageName: node
   linkType: hard
 

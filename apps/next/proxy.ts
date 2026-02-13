@@ -33,6 +33,11 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
+  // Shopify embedded app routes use App Bridge session tokens, not Supabase auth
+  if (pathname.startsWith('/shopify')) {
+    return supabaseResponse
+  }
+
   // Protected routes - redirect to login if not authenticated
   if ((pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.startsWith('/merchant')) && !user) {
     const url = request.nextUrl.clone()
@@ -65,5 +70,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/merchant/:path*', '/login', '/signup'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/merchant/:path*', '/shopify/:path*', '/login', '/signup'],
 }

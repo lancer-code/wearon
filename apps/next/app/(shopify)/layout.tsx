@@ -3,33 +3,19 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'WearOn Ai — Shopify Admin',
+  other: {
+    'shopify-api-key': process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || '',
+  },
 }
 
 export default function ShopifyRootLayout({ children }: { children: ReactNode }) {
-  const apiKey = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || ''
-
-  // Inline script checks for shop/host params before loading App Bridge.
-  // This prevents the "missing required configuration fields: shop" console error
-  // when the page is accessed directly outside the Shopify admin iframe.
-  // Placed at the top of <body> — runs synchronously before React hydrates children.
-  const bootstrapScript = `
-    (function() {
-      var params = new URLSearchParams(window.location.search);
-      if (params.has('shop') || params.has('host')) {
-        var s = document.createElement('script');
-        s.src = 'https://cdn.shopify.com/shopifycloud/app-bridge.js?apiKey=${apiKey}';
-        s.dataset.apiKey = '${apiKey}';
-        document.head.appendChild(s);
-      }
-    })();
-  `
-
   return (
     <html lang="en">
+      <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" />
+      </head>
       <body style={{ margin: 0 }}>
-        {apiKey && (
-          <script dangerouslySetInnerHTML={{ __html: bootstrapScript }} />
-        )}
         {children}
       </body>
     </html>

@@ -121,12 +121,26 @@ async function provisionStore(
   sessionToken: string
 ): Promise<{ id: string; shop_domain: string; status: string } | null> {
   try {
-    console.log('[Shopify Session] Provisioning new store for domain:', shopDomain)
+    console.log('[Shopify Session] Step 1: Starting token exchange for:', shopDomain)
 
-    const { accessToken } = await exchangeTokenForOfflineAccess(shopDomain, sessionToken)
+    let accessToken: string
+    try {
+      const result = await exchangeTokenForOfflineAccess(shopDomain, sessionToken)
+      accessToken = result.accessToken
+      console.log('[Shopify Session] Step 2: Token exchange succeeded for:', shopDomain)
+    } catch (tokenErr) {
+      console.error('[Shopify Session] Token exchange FAILED:', JSON.stringify({
+        shop: shopDomain,
+        error: tokenErr instanceof Error ? tokenErr.message : String(tokenErr),
+        stack: tokenErr instanceof Error ? tokenErr.stack : undefined,
+      }))
+      return null
+    }
+
     const encryptedToken = encrypt(accessToken)
     const supabase = getAdminClient()
 
+    console.log('[Shopify Session] Step 3: Inserting store into DB for:', shopDomain)
     const { data: store, error } = await supabase
       .from('stores')
       .insert({
@@ -140,11 +154,17 @@ async function provisionStore(
       .single()
 
     if (error || !store) {
-      console.error('[Shopify Session] Store provisioning failed:', error?.message)
+      console.error('[Shopify Session] DB insert FAILED:', JSON.stringify({
+        shop: shopDomain,
+        error: error?.message,
+        code: error?.code,
+        details: error?.details,
+      }))
       return null
     }
 
-    // Generate API key
+    console.log('[Shopify Session] Step 4: Store created, generating API key. storeId:', store.id)
+
     const randomHex = crypto.randomBytes(16).toString('hex')
     const plaintext = `wk_${randomHex}`
     const keyHash = crypto.createHash('sha256').update(plaintext).digest('hex')
@@ -158,13 +178,14 @@ async function provisionStore(
       is_active: true,
     })
 
-    console.log('[Shopify Session] Store provisioned successfully:', store.id, shopDomain)
+    console.log('[Shopify Session] Step 5: Provisioning complete:', store.id, shopDomain)
     return store as { id: string; shop_domain: string; status: string }
   } catch (err) {
-    console.error(
-      '[Shopify Session] Token exchange / provisioning error:',
-      err instanceof Error ? err.message : String(err)
-    )
+    console.error('[Shopify Session] Unexpected provisioning error:', JSON.stringify({
+      shop: shopDomain,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    }))
     return null
   }
 }

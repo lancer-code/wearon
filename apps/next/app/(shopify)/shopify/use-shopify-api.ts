@@ -7,6 +7,9 @@ import axios from 'axios'
 const apiClient = axios.create({
   baseURL: '/api/shopify/store',
   timeout: 15000,
+  // Force XHR adapter — App Bridge CDN patches window.fetch and routes
+  // requests through Shopify's admin proxy, which returns 404 for our routes.
+  adapter: 'xhr',
 })
 
 export function useShopifyApi() {

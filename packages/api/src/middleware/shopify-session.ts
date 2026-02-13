@@ -63,14 +63,16 @@ function verifySessionToken(token: string): ShopifySessionTokenPayload {
     throw new Error(`Unsupported JWT algorithm: ${header.alg}`)
   }
 
-  // Verify signature
+  // Verify signature using timing-safe comparison
   const signedContent = `${headerB64}.${payloadB64}`
   const expectedSignature = crypto
     .createHmac('sha256', apiSecret)
     .update(signedContent)
     .digest('base64url')
 
-  if (signatureB64 !== expectedSignature) {
+  const sigBuf = Buffer.from(signatureB64!, 'utf-8')
+  const expectedBuf = Buffer.from(expectedSignature, 'utf-8')
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
     throw new Error('Invalid JWT signature')
   }
 
@@ -84,8 +86,14 @@ function verifySessionToken(token: string): ShopifySessionTokenPayload {
     throw new Error('JWT audience mismatch')
   }
 
-  // Verify expiration
   const nowSeconds = Math.floor(Date.now() / 1000)
+
+  // Verify not-before
+  if (payload.nbf && payload.nbf > nowSeconds) {
+    throw new Error('JWT is not yet valid (nbf)')
+  }
+
+  // Verify expiration
   if (payload.exp < nowSeconds) {
     throw new Error('JWT has expired')
   }

@@ -14,7 +14,7 @@ import {
   Text,
 } from '@shopify/polaris'
 import { TitleBar } from '@shopify/app-bridge-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShopifyApi } from './use-shopify-api'
 
 interface StoreData {
@@ -45,8 +45,12 @@ export default function ShopifyDashboard() {
   const [apiKey, setApiKey] = useState<ApiKeyData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
+    if (loadedRef.current) return
+    loadedRef.current = true
+
     async function loadData() {
       try {
         const [storeRes, creditsRes, apiKeyRes] = await Promise.all([
@@ -64,21 +68,26 @@ export default function ShopifyDashboard() {
       }
     }
 
-    if (api.isReady) {
-      loadData()
-    }
+    loadData()
   }, [api])
 
   const handleRegenerateKey = useCallback(async () => {
+    const confirmed = window.confirm(
+      apiKey?.maskedKey
+        ? 'Regenerating will immediately invalidate your current API key. Any integrations using the old key will stop working. Continue?'
+        : 'Generate a new API key for this store?'
+    )
+    if (!confirmed) return
+
     try {
       const result = await api.post<{ apiKey: string }>('/api-key/regenerate')
       setApiKey({ maskedKey: `${result.apiKey.substring(0, 16)}...****`, createdAt: new Date().toISOString() })
     } catch {
       setError('Failed to regenerate API key')
     }
-  }, [api])
+  }, [api, apiKey?.maskedKey])
 
-  if (loading || !api.isReady) {
+  if (loading) {
     return (
       <Page>
         <TitleBar title="WearOn Ai" />

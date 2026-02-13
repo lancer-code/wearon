@@ -2,6 +2,14 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Shopify embedded app routes use App Bridge session tokens, not Supabase auth.
+  // Skip Supabase client creation entirely to avoid unnecessary latency.
+  if (pathname.startsWith('/shopify')) {
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -30,13 +38,6 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-
-  const { pathname } = request.nextUrl
-
-  // Shopify embedded app routes use App Bridge session tokens, not Supabase auth
-  if (pathname.startsWith('/shopify')) {
-    return supabaseResponse
-  }
 
   // Protected routes - redirect to login if not authenticated
   if ((pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.startsWith('/merchant')) && !user) {

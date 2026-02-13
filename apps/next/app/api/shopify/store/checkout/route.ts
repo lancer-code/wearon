@@ -23,6 +23,8 @@ async function handlePost(request: Request, context: ShopifySessionContext) {
 
   const payload = body as Record<string, unknown>
   const mode = payload.mode as string
+  const store = await getStoreById(context.storeId)
+  const userId = store.ownerUserId ?? context.storeId
 
   if (mode === 'subscription') {
     const tier = payload.tier as string
@@ -33,8 +35,7 @@ async function handlePost(request: Request, context: ShopifySessionContext) {
       )
     }
 
-    const store = await getStoreById(context.storeId)
-    const result = await createCheckout(store, { mode: 'subscription', tier: tier as 'starter' | 'growth' | 'scale' })
+    const result = await createCheckout(store, { mode: 'subscription', tier: tier as 'starter' | 'growth' | 'scale' }, userId)
     return NextResponse.json(result)
   }
 
@@ -47,8 +48,7 @@ async function handlePost(request: Request, context: ShopifySessionContext) {
       )
     }
 
-    const store = await getStoreById(context.storeId)
-    const result = await createCheckout(store, { mode: 'payg', credits })
+    const result = await createCheckout(store, { mode: 'payg', credits }, userId)
     return NextResponse.json(result)
   }
 

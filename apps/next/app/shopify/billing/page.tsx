@@ -14,7 +14,7 @@ import {
   TextField,
 } from '@shopify/polaris'
 import { TitleBar } from '@shopify/app-bridge-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShopifyApi } from '../use-shopify-api'
 
 interface TierInfo {
@@ -59,7 +59,12 @@ export default function ShopifyBillingPage() {
   const [paygCredits, setPaygCredits] = useState('100')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
+  const loadedRef = useRef(false)
+
   useEffect(() => {
+    if (loadedRef.current) return
+    loadedRef.current = true
+
     async function loadData() {
       try {
         const [catalogRes, overageRes] = await Promise.all([
@@ -75,9 +80,7 @@ export default function ShopifyBillingPage() {
       }
     }
 
-    if (api.isReady) {
-      loadData()
-    }
+    loadData()
   }, [api])
 
   const handleSubscribe = useCallback(
@@ -140,7 +143,7 @@ export default function ShopifyBillingPage() {
     }
   }, [api, paygCredits])
 
-  if (loading || !api.isReady) {
+  if (loading) {
     return (
       <Page title="Billing" backAction={{ url: '/shopify' }}>
         <TitleBar title="Billing" />

@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '../logger'
 import { addStoreCredits } from './b2b-credits'
+import { ensureHiddenTryOnCreditProduct } from './shopify-credit-product'
 import {
   calculatePaygTotalCents,
   changeSubscriptionPlan,
@@ -41,6 +42,7 @@ function makeRequestId(): string {
 
 export interface MerchantStore {
   id: string
+  ownerUserId: string | null
   shopDomain: string
   billingMode: string
   subscriptionTier: string | null
@@ -70,7 +72,7 @@ export async function getStoreByUserId(
   const { data: store, error } = await adminSupabase
     .from('stores')
     .select(
-      'id, shop_domain, billing_mode, subscription_tier, subscription_id, subscription_status, subscription_current_period_end, paddle_customer_id, status, onboarding_completed, created_at'
+      'id, owner_user_id, shop_domain, billing_mode, subscription_tier, subscription_id, subscription_status, subscription_current_period_end, paddle_customer_id, status, onboarding_completed, created_at'
     )
     .eq('owner_user_id', userId)
     .single()
@@ -89,6 +91,7 @@ export async function getStoreByUserId(
 
   return {
     id: store.id as string,
+    ownerUserId: (store.owner_user_id as string | null) ?? null,
     shopDomain: store.shop_domain as string,
     billingMode: store.billing_mode as string,
     subscriptionTier: (store.subscription_tier as string | null) ?? null,
@@ -109,7 +112,7 @@ export async function getStoreById(storeId: string): Promise<MerchantStore> {
   const { data: store, error } = await supabase
     .from('stores')
     .select(
-      'id, shop_domain, billing_mode, subscription_tier, subscription_id, subscription_status, subscription_current_period_end, paddle_customer_id, status, onboarding_completed, created_at'
+      'id, owner_user_id, shop_domain, billing_mode, subscription_tier, subscription_id, subscription_status, subscription_current_period_end, paddle_customer_id, status, onboarding_completed, created_at'
     )
     .eq('id', storeId)
     .single()
@@ -120,6 +123,7 @@ export async function getStoreById(storeId: string): Promise<MerchantStore> {
 
   return {
     id: store.id as string,
+    ownerUserId: (store.owner_user_id as string | null) ?? null,
     shopDomain: store.shop_domain as string,
     billingMode: store.billing_mode as string,
     subscriptionTier: (store.subscription_tier as string | null) ?? null,
@@ -171,6 +175,7 @@ export async function getStoreCreditBalance(storeId: string) {
 export async function createCheckout(
   store: MerchantStore,
   input: { mode: 'subscription'; tier: SubscriptionTier } | { mode: 'payg'; credits: number },
+  userId: string,
   userEmail?: string
 ) {
   const requestId = makeRequestId()
@@ -182,7 +187,7 @@ export async function createCheckout(
         requestId,
         storeId: store.id,
         shopDomain: store.shopDomain,
-        userId: store.id,
+        userId,
         userEmail,
       })
 
@@ -199,7 +204,7 @@ export async function createCheckout(
       requestId,
       storeId: store.id,
       shopDomain: store.shopDomain,
-      userId: store.id,
+      userId,
       userEmail,
     })
 
@@ -282,17 +287,41 @@ export async function changePlan(
 
     return { changed: true, targetTier, effectiveFrom }
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
     logger.error(
       {
         request_id: requestId,
         store_id: store.id,
         subscription_id: store.subscriptionId,
         target_tier: targetTier,
-        err: err instanceof Error ? err.message : String(err),
+        err: errorMessage,
       },
       '[MerchantOps] Subscription plan change failed'
     )
-    throw new MerchantOpsError('Failed to change subscription plan', 'INTERNAL_ERROR')
+
+    if (errorMessage.includes('persist upgraded subscription tier')) {
+      throw new MerchantOpsError(
+        'Database error while updating subscription. Please try again.',
+        'INTERNAL_ERROR'
+      )
+    }
+    if (errorMessage.includes('Paddle') || errorMessage.toLowerCase().includes('payment')) {
+      throw new MerchantOpsError(
+        'Payment provider temporarily unavailable. Please try again in a few minutes.',
+        'INTERNAL_ERROR'
+      )
+    }
+    if (errorMessage.includes('Credit')) {
+      throw new MerchantOpsError(
+        'Error processing subscription credits. Please contact support.',
+        'INTERNAL_ERROR'
+      )
+    }
+
+    throw new MerchantOpsError(
+      'Failed to change subscription plan. Please try again or contact support.',
+      'INTERNAL_ERROR'
+    )
   }
 }
 
@@ -306,7 +335,7 @@ export async function getApiKeyPreview(storeId: string) {
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
   if (error) {
     logger.error({ store_id: storeId, err: error.message }, '[MerchantOps] API key preview query failed')
@@ -417,9 +446,51 @@ export async function updateStoreConfig(
 ) {
   const supabase = getServiceClient()
 
+  // If switching to resell mode, sync the Shopify credit product
+  let shopifyProductId: string | null = null
+  let shopifyVariantId: string | null = null
+
+  if (billingMode === 'resell_mode' && retailCreditPrice) {
+    const { data: currentStore, error: storeError } = await supabase
+      .from('stores')
+      .select('shop_domain, access_token_encrypted, shopify_product_id, shopify_variant_id')
+      .eq('id', storeId)
+      .single()
+
+    if (storeError || !currentStore) {
+      throw new MerchantOpsError('Store not found', 'NOT_FOUND')
+    }
+
+    if (currentStore.access_token_encrypted) {
+      try {
+        const shopifyResult = await ensureHiddenTryOnCreditProduct({
+          accessTokenEncrypted: currentStore.access_token_encrypted as string,
+          existingProductId: currentStore.shopify_product_id as string | null,
+          existingVariantId: currentStore.shopify_variant_id as string | null,
+          requestId: `cfg_${crypto.randomUUID()}`,
+          retailCreditPrice,
+          shopDomain: currentStore.shop_domain as string,
+        })
+        shopifyProductId = shopifyResult.shopifyProductId
+        shopifyVariantId = shopifyResult.shopifyVariantId
+      } catch (err) {
+        logger.error(
+          { err: err instanceof Error ? err.message : String(err), storeId },
+          '[MerchantOps] Failed to sync Shopify credit product'
+        )
+        throw new MerchantOpsError('Failed to sync Shopify credit product', 'INTERNAL_ERROR')
+      }
+    }
+  }
+
   const updatePayload: Record<string, unknown> = {
     billing_mode: billingMode,
     retail_credit_price: billingMode === 'resell_mode' ? retailCreditPrice : null,
+  }
+
+  if (shopifyProductId !== null) {
+    updatePayload.shopify_product_id = shopifyProductId
+    updatePayload.shopify_variant_id = shopifyVariantId
   }
 
   const { data: updated, error } = await supabase

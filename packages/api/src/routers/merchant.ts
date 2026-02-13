@@ -73,7 +73,7 @@ export const merchantRouter = router({
     .mutation(async ({ ctx, input }) => {
       try {
         const store = await getStoreByUserId(ctx.adminSupabase, ctx.user.id)
-        return await createCheckout(store, input, ctx.user.email)
+        return await createCheckout(store, input, ctx.user.id, ctx.user.email)
       } catch (err) {
         throw toTRPCError(err)
       }

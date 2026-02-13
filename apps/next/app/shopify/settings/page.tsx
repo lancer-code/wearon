@@ -13,7 +13,7 @@ import {
   TextField,
 } from '@shopify/polaris'
 import { TitleBar } from '@shopify/app-bridge-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShopifyApi } from '../use-shopify-api'
 
 interface StoreConfig {
@@ -36,7 +36,12 @@ export default function ShopifySettingsPage() {
   const [billingMode, setBillingMode] = useState<string[]>(['absorb_mode'])
   const [retailPrice, setRetailPrice] = useState('')
 
+  const loadedRef = useRef(false)
+
   useEffect(() => {
+    if (loadedRef.current) return
+    loadedRef.current = true
+
     async function loadConfig() {
       try {
         const result = await api.get<StoreConfig>('/config')
@@ -50,9 +55,7 @@ export default function ShopifySettingsPage() {
       }
     }
 
-    if (api.isReady) {
-      loadConfig()
-    }
+    loadConfig()
   }, [api])
 
   const handleSave = useCallback(async () => {
@@ -84,7 +87,7 @@ export default function ShopifySettingsPage() {
     }
   }, [api, billingMode, retailPrice])
 
-  if (loading || !api.isReady) {
+  if (loading) {
     return (
       <Page title="Settings" backAction={{ url: '/shopify' }}>
         <TitleBar title="Settings" />

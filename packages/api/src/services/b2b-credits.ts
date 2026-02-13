@@ -1,24 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
+import { getAdminClient } from '../lib/supabase-admin'
 import { logger } from '../logger'
 import type { SubscriptionTier } from './paddle'
-
-let serviceClient: SupabaseClient | null = null
-
-function getServiceClient(): SupabaseClient {
-  if (!serviceClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
-    }
-
-    serviceClient = createClient(supabaseUrl, supabaseServiceKey)
-  }
-  return serviceClient
-}
 
 function isMissingDatabaseObject(message: string | undefined, objectName: string): boolean {
   if (!message) {
@@ -45,7 +28,7 @@ export async function deductStoreCredit(
   requestId: string,
   description = 'Generation credit deduction'
 ): Promise<boolean> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data, error } = await supabase.rpc('deduct_store_credits', {
     p_store_id: storeId,
@@ -70,7 +53,7 @@ export async function refundStoreCredit(
   requestId: string,
   description = 'Generation failed - refund'
 ): Promise<void> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { error } = await supabase.rpc('refund_store_credits', {
     p_store_id: storeId,
@@ -95,7 +78,7 @@ export async function deductStoreShopperCredit(
   requestId: string,
   description = 'B2B shopper generation'
 ): Promise<boolean> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
   const normalizedShopperEmail = normalizeShopperEmail(shopperEmail)
 
   const { data, error } = await supabase.rpc('deduct_store_shopper_credits', {
@@ -131,7 +114,7 @@ export async function refundStoreShopperCredit(
   requestId: string,
   description = 'B2B shopper generation failed - refund'
 ): Promise<void> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
   const normalizedShopperEmail = normalizeShopperEmail(shopperEmail)
 
   const { error } = await supabase.rpc('refund_store_shopper_credits', {
@@ -162,7 +145,7 @@ export async function refundStoreShopperCredit(
 export async function getStoreBalance(
   storeId: string
 ): Promise<{ balance: number; totalPurchased: number; totalSpent: number }> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data, error } = await supabase
     .from('store_credits')
@@ -189,7 +172,7 @@ export async function getStoreShopperBalance(
   storeId: string,
   shopperEmail: string
 ): Promise<{ balance: number; totalPurchased: number; totalSpent: number }> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
   const normalizedShopperEmail = normalizeShopperEmail(shopperEmail)
 
   const { data, error } = await supabase
@@ -236,7 +219,7 @@ export async function addStoreCredits(
   requestId: string,
   description: string
 ): Promise<void> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { error } = await supabase.rpc('add_store_credits', {
     p_store_id: storeId,
@@ -269,7 +252,7 @@ export async function logStoreOverage(
   description: string,
   amount = 1
 ): Promise<void> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { error } = await supabase.from('store_credit_transactions').insert({
     store_id: storeId,
@@ -296,7 +279,7 @@ export async function getStoreBillingProfile(storeId: string): Promise<{
   subscriptionId: string | null
   subscriptionStatus: string | null
 }> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data, error } = await supabase
     .from('stores')

@@ -1,14 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '../lib/supabase-admin'
 import { logger } from '../logger'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('Supabase credentials not configured for storage cleanup')
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 const BUCKET_NAME = 'virtual-tryon-images'
 const EXPIRY_HOURS = 6
@@ -35,7 +26,7 @@ async function cleanupFolder(folderPath: string, expiryHours: number): Promise<{
 
   try {
     // List all files in the folder
-    const { data: files, error: listError } = await supabase.storage
+    const { data: files, error: listError } = await getAdminClient().storage
       .from(BUCKET_NAME)
       .list(folderPath, {
         limit: 1000,
@@ -68,7 +59,7 @@ async function cleanupFolder(folderPath: string, expiryHours: number): Promise<{
       const batch = filesToDelete.slice(i, i + batchSize)
       const filePaths = batch.map((file) => `${folderPath}/${file.name}`)
 
-      const { error: deleteError } = await supabase.storage.from(BUCKET_NAME).remove(filePaths)
+      const { error: deleteError } = await getAdminClient().storage.from(BUCKET_NAME).remove(filePaths)
 
       if (deleteError) {
         filePaths.forEach((path) => {
@@ -189,7 +180,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
     for (const session of stuckSessions) {
       try {
         // Refund credits
-        const { error: refundError } = await supabase.rpc('refund_credits', {
+        const { error: refundError } = await getAdminClient().rpc('refund_credits', {
           p_user_id: session.user_id,
           p_amount: 1,
           p_description: `Stuck job recovery: session ${session.id} timed out after ${STUCK_JOB_TIMEOUT_MINUTES} minutes`,
@@ -218,7 +209,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
         }
 
         // Log analytics event
-        await supabase.from('analytics_events').insert({
+        await getAdminClient().from('analytics_events').insert({
           event_type: 'stuck_job_recovered',
           user_id: session.user_id,
           metadata: {

@@ -90,9 +90,16 @@ export default function ShopifyDashboard() {
     }
   }, [api, apiKey?.maskedKey])
 
-  const handleCopyKey = useCallback(() => {
-    if (newPlaintextKey) {
-      navigator.clipboard.writeText(newPlaintextKey)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyKey = useCallback(async () => {
+    if (!newPlaintextKey) return
+    try {
+      await navigator.clipboard.writeText(newPlaintextKey)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setError('Failed to copy — please select and copy the key manually')
     }
   }, [newPlaintextKey])
 
@@ -249,7 +256,7 @@ export default function ShopifyDashboard() {
                 <InlineStack gap="300">
                   {newPlaintextKey && (
                     <Button variant="primary" onClick={handleCopyKey}>
-                      Copy API key
+                      {copied ? 'Copied!' : 'Copy API key'}
                     </Button>
                   )}
                   <Button onClick={handleRegenerateKey}>

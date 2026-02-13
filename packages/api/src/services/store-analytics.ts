@@ -1,22 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { getAdminClient } from '../lib/supabase-admin'
 import { logger } from '../logger'
-
-let serviceClient: SupabaseClient | null = null
-
-function getServiceClient(): SupabaseClient {
-  if (!serviceClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
-    }
-
-    serviceClient = createClient(supabaseUrl, supabaseServiceKey)
-  }
-  return serviceClient
-}
 
 export type StoreAnalyticsEventType =
   | 'generation_queued'
@@ -34,7 +17,7 @@ export async function logStoreAnalyticsEvent(
   metadata: Record<string, unknown> = {},
   shopperEmail?: string,
 ): Promise<void> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const row: Record<string, unknown> = {
     store_id: storeId,

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '../lib/supabase-admin'
 import { logger } from '../logger'
 import { addStoreCredits } from './b2b-credits'
 import { ensureHiddenTryOnCreditProduct } from './shopify-credit-product'
@@ -14,21 +14,6 @@ import {
   type SubscriptionTier,
 } from './paddle'
 
-let serviceClient: SupabaseClient | null = null
-
-function getServiceClient(): SupabaseClient {
-  if (!serviceClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
-    }
-
-    serviceClient = createClient(supabaseUrl, supabaseServiceKey)
-  }
-  return serviceClient
-}
 
 const TIER_ORDER: Record<SubscriptionTier, number> = {
   starter: 1,
@@ -107,7 +92,7 @@ export async function getStoreByUserId(
 }
 
 export async function getStoreById(storeId: string): Promise<MerchantStore> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data: store, error } = await supabase
     .from('stores')
@@ -144,7 +129,7 @@ export function getStoreBillingCatalog(store: MerchantStore) {
     store: {
       id: store.id,
       subscriptionTier: store.subscriptionTier,
-      subscriptionId: store.subscriptionId,
+      hasSubscription: !!store.subscriptionId,
       subscriptionStatus: store.subscriptionStatus,
       currentPeriodEnd: store.subscriptionCurrentPeriodEnd,
     },
@@ -152,7 +137,7 @@ export function getStoreBillingCatalog(store: MerchantStore) {
 }
 
 export async function getStoreCreditBalance(storeId: string) {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data: credits, error } = await supabase
     .from('store_credits')
@@ -233,7 +218,7 @@ export async function changePlan(
   targetTier: SubscriptionTier
 ) {
   const requestId = makeRequestId()
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const currentTierRaw = store.subscriptionTier
   const currentTier =
@@ -326,7 +311,7 @@ export async function changePlan(
 }
 
 export async function getApiKeyPreview(storeId: string) {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data: apiKey, error } = await supabase
     .from('store_api_keys')
@@ -351,7 +336,7 @@ export async function getApiKeyPreview(storeId: string) {
 }
 
 export async function regenerateApiKey(storeId: string, shopDomain: string) {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const randomHex = crypto.randomBytes(16).toString('hex')
   const plaintext = `wk_${randomHex}`
@@ -395,7 +380,7 @@ export async function regenerateApiKey(storeId: string, shopDomain: string) {
 }
 
 export async function getOverageUsage(storeId: string) {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data, error } = await supabase
     .from('store_credit_transactions')
@@ -419,7 +404,7 @@ export async function getOverageUsage(storeId: string) {
 }
 
 export async function getStoreConfig(storeId: string) {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data: store, error } = await supabase
     .from('stores')
@@ -446,7 +431,7 @@ export async function updateStoreConfig(
   billingMode: string,
   retailCreditPrice: number | null
 ) {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   // If switching to resell mode, sync the Shopify credit product
   let shopifyProductId: string | null = null

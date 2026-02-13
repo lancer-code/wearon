@@ -1,24 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { getAdminClient } from '../lib/supabase-admin'
 import { logger } from '../logger'
 
 const B2B_BUCKET = 'virtual-tryon-images'
-
-let serviceClient: SupabaseClient | null = null
-
-function getServiceClient(): SupabaseClient {
-  if (!serviceClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
-    }
-
-    serviceClient = createClient(supabaseUrl, supabaseServiceKey)
-  }
-  return serviceClient
-}
 
 /**
  * Get the storage path prefix for a store's uploads.
@@ -43,7 +26,7 @@ export async function createStoreUploadUrls(
   storeId: string,
   files: { fileName: string; contentType: string }[],
 ): Promise<{ path: string; uploadUrl: string; token: string }[]> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
   const prefix = getStoreUploadPath(storeId)
 
   const results = await Promise.all(
@@ -82,7 +65,7 @@ export async function createStoreDownloadUrls(
   paths: string[],
   expiresIn = 6 * 60 * 60,
 ): Promise<{ path: string; downloadUrl: string }[]> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
   const prefix = getStoreUploadPath(storeId)
 
   const results = await Promise.all(

@@ -1,13 +1,8 @@
-import { type SupabaseClient, createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { getAdminClient } from '../lib/supabase-admin'
 import { logger } from '../logger'
 
 const CHURN_THRESHOLD = 0.5 // 50% week-over-week decrease
-
-function getAdminSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  return createClient(supabaseUrl, serviceKey)
-}
 
 export interface ChurnDetectionResult {
   storeId: string
@@ -26,7 +21,7 @@ export async function detectChurnRisk(
   // biome-ignore lint: SupabaseClient generic variance
   supabase?: SupabaseClient<any>,
 ): Promise<ChurnDetectionResult> {
-  const db = supabase || getAdminSupabase()
+  const db = supabase || getAdminClient()
   const now = new Date()
 
   const currentWeekStart = new Date(now)
@@ -91,7 +86,7 @@ export async function runChurnDetectionForAllStores(): Promise<{
   unflagged: number
   errors: Array<{ storeId: string; error: string }>
 }> {
-  const db = getAdminSupabase()
+  const db = getAdminClient()
 
   // Get all active stores
   const { data: stores, error: storesError } = await db

@@ -36,7 +36,7 @@ interface BillingCatalog {
   store: {
     id: string
     subscriptionTier: string | null
-    subscriptionId: string | null
+    hasSubscription: boolean
     subscriptionStatus: string | null
     currentPeriodEnd: string | null
   }
@@ -60,6 +60,19 @@ export default function ShopifyBillingPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   const loadedRef = useRef(false)
+
+  const reloadAllData = useCallback(async () => {
+    try {
+      const [catalogRes, overageRes] = await Promise.all([
+        api.get<BillingCatalog>('/billing-catalog'),
+        api.get<OverageEntry[]>('/overage'),
+      ])
+      setCatalog(catalogRes)
+      setOverageHistory(overageRes)
+    } catch {
+      // Silent reload failure — stale data is acceptable
+    }
+  }, [api])
 
   useEffect(() => {
     if (loadedRef.current) return
@@ -114,19 +127,6 @@ export default function ShopifyBillingPage() {
     [api]
   )
 
-  const reloadAllData = useCallback(async () => {
-    try {
-      const [catalogRes, overageRes] = await Promise.all([
-        api.get<BillingCatalog>('/billing-catalog'),
-        api.get<OverageEntry[]>('/overage'),
-      ])
-      setCatalog(catalogRes)
-      setOverageHistory(overageRes)
-    } catch {
-      // Silent reload failure — stale data is acceptable
-    }
-  }, [api])
-
   const handleChangePlan = useCallback(
     async (targetTier: string) => {
       setActionLoading(`change-${targetTier}`)
@@ -143,11 +143,12 @@ export default function ShopifyBillingPage() {
   )
 
   const handlePaygPurchase = useCallback(async () => {
-    const credits = Number.parseInt(paygCredits, 10)
-    if (!credits || credits < 1 || credits > 5000) {
-      setError('Credits must be between 1 and 5000')
+    const parsed = Number(paygCredits)
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > 5000) {
+      setError('Credits must be a whole number between 1 and 5000')
       return
     }
+    const credits = parsed
 
     setActionLoading('payg')
     try {
@@ -182,7 +183,7 @@ export default function ShopifyBillingPage() {
 
   const tiers = catalog?.catalog.subscriptionTiers
   const currentTier = catalog?.store.subscriptionTier
-  const hasSubscription = !!catalog?.store.subscriptionId
+  const hasSubscription = catalog?.store.hasSubscription ?? false
 
   const overageRows = overageHistory.map((entry) => [
     entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '—',

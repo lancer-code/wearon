@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '../lib/supabase-admin'
 import { createChildLogger } from '../logger'
 
 export interface CleanupResult {
@@ -9,15 +9,9 @@ export interface CleanupResult {
   alreadyInactive: boolean
 }
 
-function getAdminSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  return createClient(supabaseUrl, serviceKey)
-}
-
 export async function cleanupStore(storeId: string, requestId: string): Promise<CleanupResult> {
   const log = createChildLogger(requestId)
-  const supabase = getAdminSupabase()
+  const supabase = getAdminClient()
 
   const result: CleanupResult = {
     storeId,

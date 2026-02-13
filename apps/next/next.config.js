@@ -42,6 +42,10 @@ module.exports = {
             key: 'Content-Security-Policy',
             value: "frame-ancestors https://*.myshopify.com https://admin.shopify.com;",
           },
+          {
+            key: 'X-Frame-Options',
+            value: 'ALLOW-FROM https://admin.shopify.com',
+          },
         ],
       },
     ]

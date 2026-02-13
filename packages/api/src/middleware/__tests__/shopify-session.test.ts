@@ -7,21 +7,20 @@ const TEST_API_SECRET = 'test-api-secret-key'
 
 vi.stubEnv('NEXT_PUBLIC_SHOPIFY_CLIENT_ID', TEST_API_KEY)
 vi.stubEnv('SHOPIFY_CLIENT_SECRET', TEST_API_SECRET)
-vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co')
-vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key')
+// Mock supabase admin client — keep a reference to override per-test
+const mockSingle = vi.fn(() =>
+  Promise.resolve({
+    data: { id: 'store-123', shop_domain: 'test-store.myshopify.com', status: 'active' },
+    error: null,
+  })
+)
 
-// Mock supabase
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
+vi.mock('../../lib/supabase-admin', () => ({
+  getAdminClient: vi.fn(() => ({
     from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
-          single: vi.fn(() =>
-            Promise.resolve({
-              data: { id: 'store-123', shop_domain: 'test-store.myshopify.com', status: 'active' },
-              error: null,
-            })
-          ),
+          single: mockSingle,
         })),
       })),
     })),
@@ -69,6 +68,13 @@ function createValidPayload(overrides: Record<string, unknown> = {}): Record<str
 describe('authenticateShopifySession', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Restore default mock after clearAllMocks wipes implementations
+    mockSingle.mockImplementation(() =>
+      Promise.resolve({
+        data: { id: 'store-123', shop_domain: 'test-store.myshopify.com', status: 'active' },
+        error: null,
+      })
+    )
   })
 
   it('authenticates a valid session token', async () => {
@@ -182,5 +188,21 @@ describe('authenticateShopifySession', () => {
 
     expect(timingSpy).toHaveBeenCalled()
     timingSpy.mockRestore()
+  })
+
+  it('rejects store with non-active status', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: { id: 'store-456', shop_domain: 'test-store.myshopify.com', status: 'suspended' },
+      error: null,
+    })
+
+    const token = createJWT(createValidPayload())
+    const request = new Request('https://wearonai.com/api/shopify/store', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    const result = await authenticateShopifySession(request)
+
+    expect('error' in result).toBe(true)
   })
 })

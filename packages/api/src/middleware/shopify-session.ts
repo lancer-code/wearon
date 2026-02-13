@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { getAdminClient } from '../lib/supabase-admin'
 import { logger } from '../logger'
 
 export interface ShopifySessionContext {
@@ -21,21 +21,6 @@ interface ShopifySessionTokenPayload {
   sid: string
 }
 
-let serviceClient: ReturnType<typeof createClient> | null = null
-
-function getServiceClient() {
-  if (!serviceClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
-    }
-
-    serviceClient = createClient(supabaseUrl, supabaseServiceKey)
-  }
-  return serviceClient
-}
 
 function base64UrlDecode(str: string): Buffer {
   const padded = str.replace(/-/g, '+').replace(/_/g, '/')
@@ -114,7 +99,7 @@ function extractShopDomain(dest: string): string {
 async function lookupStoreByDomain(
   shopDomain: string
 ): Promise<{ id: string; shop_domain: string; status: string } | null> {
-  const supabase = getServiceClient()
+  const supabase = getAdminClient()
 
   const { data, error } = await supabase
     .from('stores')
@@ -177,6 +162,19 @@ export async function authenticateShopifySession(
       error: NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Store not found' } },
         { status: 404 }
+      ),
+    }
+  }
+
+  if (store.status !== 'active') {
+    logger.warn(
+      { shopDomain, status: store.status },
+      '[Shopify Session] Store is not active'
+    )
+    return {
+      error: NextResponse.json(
+        { error: { code: 'FORBIDDEN', message: 'Store account is not active' } },
+        { status: 403 }
       ),
     }
   }

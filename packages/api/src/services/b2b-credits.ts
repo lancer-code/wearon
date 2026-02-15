@@ -283,7 +283,7 @@ export async function getStoreBillingProfile(storeId: string): Promise<{
 
   const { data, error } = await supabase
     .from('stores')
-    .select('subscription_tier, subscription_id')
+    .select('subscription_tier, subscription_id, subscription_status')
     .eq('id', storeId)
     .single()
 
@@ -300,25 +300,9 @@ export async function getStoreBillingProfile(storeId: string): Promise<{
   const subscriptionTier =
     rawTier === 'starter' || rawTier === 'growth' || rawTier === 'scale' ? rawTier : null
 
-  let subscriptionStatus: string | null = null
-  const { data: statusData, error: statusError } = await supabase
-    .from('stores')
-    .select('subscription_status')
-    .eq('id', storeId)
-    .single()
-
-  if (!statusError && statusData) {
-    subscriptionStatus = (statusData.subscription_status as string | null) ?? null
-  } else if (!isMissingDatabaseObject(statusError?.message, 'subscription_status')) {
-    logger.error(
-      { storeId, err: statusError?.message },
-      '[B2B Credits] subscription_status query failed'
-    )
-  }
-
   return {
     subscriptionTier,
     subscriptionId: (data.subscription_id as string | null) ?? null,
-    subscriptionStatus,
+    subscriptionStatus: (data.subscription_status as string | null) ?? null,
   }
 }

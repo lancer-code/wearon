@@ -249,35 +249,24 @@ export const generationRouter = router({
       throw new Error('Unauthorized')
     }
 
-    // Get total generations count
-    const { count: totalCount, error: countError } = await ctx.supabase
-      .from('generation_sessions')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', ctx.user.id)
+    const { data, error } = await ctx.supabase.rpc('get_user_generation_stats', {
+      p_user_id: ctx.user.id,
+    })
 
-    // Get completed generations count
-    const { count: completedCount, error: completedError } = await ctx.supabase
-      .from('generation_sessions')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', ctx.user.id)
-      .eq('status', 'completed')
-
-    // Get pending/processing count
-    const { count: activeCount, error: activeError } = await ctx.supabase
-      .from('generation_sessions')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', ctx.user.id)
-      .in('status', ['queued', 'processing'])
-
-    if (countError || completedError || activeError) {
+    if (error || !data) {
       throw new Error('Failed to fetch generation statistics')
     }
 
+    const stats = Array.isArray(data) ? data[0] : data
+    const total = Number(stats?.total ?? 0)
+    const completed = Number(stats?.completed ?? 0)
+    const failed = Number(stats?.failed ?? 0)
+
     return {
-      total: totalCount || 0,
-      completed: completedCount || 0,
-      active: activeCount || 0,
-      failed: (totalCount || 0) - (completedCount || 0) - (activeCount || 0),
+      total,
+      completed,
+      active: total - completed - failed,
+      failed,
     }
   }),
 })

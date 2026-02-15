@@ -30,24 +30,29 @@ export const analyticsRouter = router({
    * Get generation stats by status
    */
   getGenerationStats: protectedProcedure.query(async ({ ctx }) => {
-    // Get counts for each status
-    const { data: allSessions, error: fetchError } = await ctx.supabase
-      .from('generation_sessions')
-      .select('status')
+    const { data, error } = await ctx.supabase.rpc('get_generation_status_counts')
 
-    if (fetchError) {
-      throw new Error(fetchError.message)
+    if (error) {
+      throw new Error(error.message)
     }
 
-    const stats = {
-      total: allSessions?.length || 0,
-      completed: allSessions?.filter((s) => s.status === 'completed').length || 0,
-      failed: allSessions?.filter((s) => s.status === 'failed').length || 0,
-      pending: allSessions?.filter((s) => s.status === 'pending').length || 0,
-      processing: allSessions?.filter((s) => s.status === 'processing').length || 0,
+    const rows = Array.isArray(data) ? data : []
+    const statusMap: Record<string, number> = {}
+    let total = 0
+
+    for (const row of rows) {
+      const count = Number(row.count ?? 0)
+      statusMap[row.status] = count
+      total += count
     }
 
-    return stats
+    return {
+      total,
+      completed: statusMap['completed'] || 0,
+      failed: statusMap['failed'] || 0,
+      pending: statusMap['pending'] || 0,
+      processing: statusMap['processing'] || 0,
+    }
   }),
 
   /**
@@ -167,17 +172,15 @@ export const analyticsRouter = router({
    * Get average processing times
    */
   getProcessingMetrics: protectedProcedure.query(async ({ ctx }) => {
-    const { data, error } = await ctx.supabase
-      .from('generation_sessions')
-      .select('processing_time_ms, status')
-      .eq('status', 'completed')
-      .not('processing_time_ms', 'is', null)
+    const { data, error } = await ctx.supabase.rpc('get_processing_metrics')
 
     if (error) {
       throw new Error(error.message)
     }
 
-    if (!data || data.length === 0) {
+    const row = Array.isArray(data) ? data[0] : data
+
+    if (!row || Number(row.total) === 0) {
       return {
         avgMs: 0,
         minMs: 0,
@@ -186,16 +189,11 @@ export const analyticsRouter = router({
       }
     }
 
-    const times = data.map((s) => s.processing_time_ms || 0)
-    const avg = times.reduce((sum, t) => sum + t, 0) / times.length
-    const min = Math.min(...times)
-    const max = Math.max(...times)
-
     return {
-      avgMs: Math.round(avg),
-      minMs: min,
-      maxMs: max,
-      count: times.length,
+      avgMs: Number(row.avg_ms ?? 0),
+      minMs: Number(row.min_ms ?? 0),
+      maxMs: Number(row.max_ms ?? 0),
+      count: Number(row.total ?? 0),
     }
   }),
 
@@ -310,45 +308,50 @@ export const analyticsRouter = router({
         throw new Error(storesError.message)
       }
 
-      // For each store, get generation count and last generation date
+      // Batch: get generation counts for all stores via RPC (eliminates N+1)
       const storeIds = stores?.map((s) => s.id) || []
-      const storeStats: Array<{
-        store_id: string
-        shop_domain: string
-        billing_mode: string
-        subscription_tier: string | null
-        status: string
-        is_churn_risk: boolean
-        churn_flagged_at: string | null
-        credit_balance: number
-        total_spent: number
-        generation_count: number
-        last_generation_at: string | null
-      }> = []
+      const { data: genCounts, error: genCountsError } = await db.rpc('get_store_generation_counts')
 
-      for (const store of stores || []) {
-        const { count: genCount, error: genCountError } = await db
+      if (genCountsError) {
+        throw new Error(genCountsError.message)
+      }
+
+      // Build lookup map from RPC results
+      const genCountMap = new Map<string, { total: number; completed: number; failed: number }>()
+      for (const row of genCounts || []) {
+        genCountMap.set(row.store_id, {
+          total: Number(row.total ?? 0),
+          completed: Number(row.completed ?? 0),
+          failed: Number(row.failed ?? 0),
+        })
+      }
+
+      // Batch: get last generation date for the current page of stores
+      const lastGenMap = new Map<string, string | null>()
+      if (storeIds.length > 0) {
+        const { data: lastGens } = await db
           .from('store_generation_sessions')
-          .select('*', { count: 'exact', head: true })
-          .eq('store_id', store.id)
-
-        if (genCountError) {
-          throw new Error(genCountError.message)
-        }
-
-        const { data: lastGen } = await db
-          .from('store_generation_sessions')
-          .select('created_at')
-          .eq('store_id', store.id)
+          .select('store_id, created_at')
+          .in('store_id', storeIds)
           .order('created_at', { ascending: false })
-          .limit(1)
 
+        // First occurrence per store_id is the most recent
+        for (const row of lastGens || []) {
+          if (!lastGenMap.has(row.store_id)) {
+            lastGenMap.set(row.store_id, row.created_at)
+          }
+        }
+      }
+
+      const storeStats = (stores || []).map((store) => {
         // store_credits is a joined relation — could be array or object
         const credits = Array.isArray(store.store_credits)
           ? store.store_credits[0]
           : store.store_credits
 
-        storeStats.push({
+        const counts = genCountMap.get(store.id)
+
+        return {
           store_id: store.id,
           shop_domain: store.shop_domain,
           billing_mode: store.billing_mode,
@@ -358,10 +361,10 @@ export const analyticsRouter = router({
           churn_flagged_at: store.churn_flagged_at ?? null,
           credit_balance: credits?.balance ?? 0,
           total_spent: credits?.total_spent ?? 0,
-          generation_count: genCount || 0,
-          last_generation_at: lastGen?.[0]?.created_at ?? null,
-        })
-      }
+          generation_count: counts?.total ?? 0,
+          last_generation_at: lastGenMap.get(store.id) ?? null,
+        }
+      })
 
       return {
         stores: storeStats,

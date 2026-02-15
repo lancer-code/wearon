@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       analytics_events: {
@@ -42,6 +67,47 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_webhook_events: {
+        Row: {
+          event_id: string
+          event_type: string
+          id: string
+          payload: Json
+          processed_at: string
+          provider: string
+          request_id: string | null
+          store_id: string | null
+        }
+        Insert: {
+          event_id: string
+          event_type: string
+          id?: string
+          payload: Json
+          processed_at?: string
+          provider: string
+          request_id?: string | null
+          store_id?: string | null
+        }
+        Update: {
+          event_id?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed_at?: string
+          provider?: string
+          request_id?: string | null
+          store_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_webhook_events_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
         ]
@@ -88,10 +154,13 @@ export type Database = {
           created_at: string | null
           credits_used: number | null
           error_message: string | null
+          estimated_cost_usd: number | null
           generated_image_url: string | null
           id: string
+          input_tokens: number | null
           model_image_url: string
           outfit_image_url: string | null
+          output_tokens: number | null
           processing_time_ms: number | null
           prompt_system: string
           prompt_user: string | null
@@ -105,10 +174,13 @@ export type Database = {
           created_at?: string | null
           credits_used?: number | null
           error_message?: string | null
+          estimated_cost_usd?: number | null
           generated_image_url?: string | null
           id?: string
+          input_tokens?: number | null
           model_image_url: string
           outfit_image_url?: string | null
+          output_tokens?: number | null
           processing_time_ms?: number | null
           prompt_system: string
           prompt_user?: string | null
@@ -122,10 +194,13 @@ export type Database = {
           created_at?: string | null
           credits_used?: number | null
           error_message?: string | null
+          estimated_cost_usd?: number | null
           generated_image_url?: string | null
           id?: string
+          input_tokens?: number | null
           model_image_url?: string
           outfit_image_url?: string | null
+          output_tokens?: number | null
           processing_time_ms?: number | null
           prompt_system?: string
           prompt_user?: string | null
@@ -226,7 +301,7 @@ export type Database = {
       }
       store_analytics_events: {
         Row: {
-          created_at: string | null
+          created_at: string
           event_type: string
           id: string
           metadata: Json | null
@@ -234,7 +309,7 @@ export type Database = {
           store_id: string
         }
         Insert: {
-          created_at?: string | null
+          created_at?: string
           event_type: string
           id?: string
           metadata?: Json | null
@@ -242,7 +317,7 @@ export type Database = {
           store_id: string
         }
         Update: {
-          created_at?: string | null
+          created_at?: string
           event_type?: string
           id?: string
           metadata?: Json | null
@@ -266,6 +341,7 @@ export type Database = {
           id: string
           is_active: boolean
           key_hash: string
+          key_prefix: string | null
           store_id: string
         }
         Insert: {
@@ -274,6 +350,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           key_hash: string
+          key_prefix?: string | null
           store_id: string
         }
         Update: {
@@ -282,6 +359,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           key_hash?: string
+          key_prefix?: string | null
           store_id?: string
         }
         Relationships: [
@@ -297,7 +375,7 @@ export type Database = {
       store_credit_transactions: {
         Row: {
           amount: number
-          created_at: string | null
+          created_at: string
           description: string | null
           id: string
           request_id: string | null
@@ -306,7 +384,7 @@ export type Database = {
         }
         Insert: {
           amount: number
-          created_at?: string | null
+          created_at?: string
           description?: string | null
           id?: string
           request_id?: string | null
@@ -315,7 +393,7 @@ export type Database = {
         }
         Update: {
           amount?: number
-          created_at?: string | null
+          created_at?: string
           description?: string | null
           id?: string
           request_id?: string | null
@@ -370,13 +448,16 @@ export type Database = {
       store_generation_sessions: {
         Row: {
           completed_at: string | null
-          created_at: string | null
+          created_at: string
           credits_used: number
           error_message: string | null
+          estimated_cost_usd: number | null
           generated_image_url: string | null
           id: string
+          input_tokens: number | null
           model_image_url: string
           outfit_image_url: string | null
+          output_tokens: number | null
           processing_time_ms: number | null
           prompt_system: string
           prompt_user: string | null
@@ -387,13 +468,16 @@ export type Database = {
         }
         Insert: {
           completed_at?: string | null
-          created_at?: string | null
+          created_at?: string
           credits_used?: number
           error_message?: string | null
+          estimated_cost_usd?: number | null
           generated_image_url?: string | null
           id?: string
+          input_tokens?: number | null
           model_image_url: string
           outfit_image_url?: string | null
+          output_tokens?: number | null
           processing_time_ms?: number | null
           prompt_system: string
           prompt_user?: string | null
@@ -404,13 +488,16 @@ export type Database = {
         }
         Update: {
           completed_at?: string | null
-          created_at?: string | null
+          created_at?: string
           credits_used?: number
           error_message?: string | null
+          estimated_cost_usd?: number | null
           generated_image_url?: string | null
           id?: string
+          input_tokens?: number | null
           model_image_url?: string
           outfit_image_url?: string | null
+          output_tokens?: number | null
           processing_time_ms?: number | null
           prompt_system?: string
           prompt_user?: string | null
@@ -515,47 +602,116 @@ export type Database = {
         Row: {
           access_token_encrypted: string | null
           billing_mode: string
+          churn_flagged_at: string | null
           created_at: string | null
           id: string
+          is_churn_risk: boolean
           onboarding_completed: boolean
+          owner_user_id: string | null
+          paddle_customer_id: string | null
           retail_credit_price: number | null
           shop_domain: string
           shopify_product_id: string | null
           shopify_variant_id: string | null
           status: string
+          subscription_current_period_end: string | null
           subscription_id: string | null
+          subscription_status: string | null
           subscription_tier: string | null
           updated_at: string | null
         }
         Insert: {
           access_token_encrypted?: string | null
           billing_mode?: string
+          churn_flagged_at?: string | null
           created_at?: string | null
           id?: string
+          is_churn_risk?: boolean
           onboarding_completed?: boolean
+          owner_user_id?: string | null
+          paddle_customer_id?: string | null
           retail_credit_price?: number | null
           shop_domain: string
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
           status?: string
+          subscription_current_period_end?: string | null
           subscription_id?: string | null
+          subscription_status?: string | null
           subscription_tier?: string | null
           updated_at?: string | null
         }
         Update: {
           access_token_encrypted?: string | null
           billing_mode?: string
+          churn_flagged_at?: string | null
           created_at?: string | null
           id?: string
+          is_churn_risk?: boolean
           onboarding_completed?: boolean
+          owner_user_id?: string | null
+          paddle_customer_id?: string | null
           retail_credit_price?: number | null
           shop_domain?: string
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
           status?: string
+          subscription_current_period_end?: string | null
           subscription_id?: string | null
+          subscription_status?: string | null
           subscription_tier?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_body_profiles: {
+        Row: {
+          body_type: string | null
+          created_at: string | null
+          est_chest_cm: number | null
+          est_hip_cm: number | null
+          est_shoulder_cm: number | null
+          est_waist_cm: number | null
+          fit_preference: string | null
+          gender: string | null
+          height_cm: number
+          id: string
+          source: string
+          updated_at: string | null
+          user_id: string
+          weight_kg: number | null
+        }
+        Insert: {
+          body_type?: string | null
+          created_at?: string | null
+          est_chest_cm?: number | null
+          est_hip_cm?: number | null
+          est_shoulder_cm?: number | null
+          est_waist_cm?: number | null
+          fit_preference?: string | null
+          gender?: string | null
+          height_cm: number
+          id?: string
+          source?: string
+          updated_at?: string | null
+          user_id: string
+          weight_kg?: number | null
+        }
+        Update: {
+          body_type?: string | null
+          created_at?: string | null
+          est_chest_cm?: number | null
+          est_hip_cm?: number | null
+          est_shoulder_cm?: number | null
+          est_waist_cm?: number | null
+          fit_preference?: string | null
+          gender?: string | null
+          height_cm?: number
+          id?: string
+          source?: string
+          updated_at?: string | null
+          user_id?: string
+          weight_kg?: number | null
         }
         Relationships: []
       }
@@ -675,6 +831,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_store_credits: {
+        Args: {
+          p_amount: number
+          p_description?: string
+          p_request_id: string
+          p_store_id: string
+          p_type: string
+        }
+        Returns: undefined
+      }
       deduct_credits: {
         Args: { p_amount: number; p_description?: string; p_user_id: string }
         Returns: boolean
@@ -688,6 +854,49 @@ export type Database = {
         }
         Returns: boolean
       }
+      deduct_store_shopper_credits: {
+        Args: {
+          p_amount: number
+          p_description?: string
+          p_request_id: string
+          p_shopper_email: string
+          p_store_id: string
+        }
+        Returns: boolean
+      }
+      get_generation_status_counts: {
+        Args: never
+        Returns: {
+          count: number
+          status: string
+        }[]
+      }
+      get_processing_metrics: {
+        Args: never
+        Returns: {
+          avg_ms: number
+          max_ms: number
+          min_ms: number
+          total: number
+        }[]
+      }
+      get_store_generation_counts: {
+        Args: never
+        Returns: {
+          completed: number
+          failed: number
+          store_id: string
+          total: number
+        }[]
+      }
+      get_user_generation_stats: {
+        Args: { p_user_id: string }
+        Returns: {
+          completed: number
+          failed: number
+          total: number
+        }[]
+      }
       get_user_permissions: {
         Args: { p_user_id: string }
         Returns: {
@@ -698,6 +907,27 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: {
           role_name: string
+        }[]
+      }
+      process_store_shopper_purchase: {
+        Args: {
+          p_amount_paid: number
+          p_credits_purchased: number
+          p_currency?: string
+          p_request_id?: string
+          p_shopify_order_id: string
+          p_shopper_email: string
+          p_store_id: string
+        }
+        Returns: {
+          amount_paid: number
+          credits_purchased: number
+          currency: string
+          purchase_id: string
+          shopify_order_id: string
+          shopper_email: string
+          status: string
+          store_id: string
         }[]
       }
       refund_credits: {
@@ -713,6 +943,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      refund_store_shopper_credits: {
+        Args: {
+          p_amount: number
+          p_description?: string
+          p_request_id: string
+          p_shopper_email: string
+          p_store_id: string
+        }
+        Returns: undefined
+      }
       user_has_permission: {
         Args: { p_permission_name: string; p_user_id: string }
         Returns: boolean
@@ -721,6 +961,7 @@ export type Database = {
         Args: { p_role_name: string; p_user_id: string }
         Returns: boolean
       }
+      uuid_generate_v7: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
@@ -849,6 +1090,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

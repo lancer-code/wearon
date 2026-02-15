@@ -6,7 +6,7 @@ const iso8601DateString = z.string().refine(
     const date = new Date(val)
     return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(val.substring(0, 10))
   },
-  { message: 'Must be a valid ISO 8601 date string' },
+  { message: 'Must be a valid ISO 8601 date string' }
 )
 
 export const analyticsRouter = router({
@@ -63,7 +63,7 @@ export const analyticsRouter = router({
     .input(
       z.object({
         days: z.number().int().min(1).max(90).default(30),
-      }),
+      })
     )
     .query(async ({ input, ctx }) => {
       const { data, error } = await ctx.supabase
@@ -146,7 +146,7 @@ export const analyticsRouter = router({
         eventType: z
           .enum(['generation_started', 'generation_completed', 'generation_failed', 'user_signup'])
           .optional(),
-      }),
+      })
     )
     .query(async ({ input, ctx }) => {
       let query = ctx.supabase
@@ -203,10 +203,12 @@ export const analyticsRouter = router({
    */
   getB2BOverview: adminProcedure
     .input(
-      z.object({
-        startDate: iso8601DateString.optional(),
-        endDate: iso8601DateString.optional(),
-      }).optional(),
+      z
+        .object({
+          startDate: iso8601DateString.optional(),
+          endDate: iso8601DateString.optional(),
+        })
+        .optional()
     )
     .query(async ({ input, ctx }) => {
       const db = ctx.adminSupabase
@@ -248,10 +250,8 @@ export const analyticsRouter = router({
         throw new Error(creditsError.message)
       }
 
-      const totalCreditsConsumed = creditData?.reduce(
-        (sum, row) => sum + (row.total_spent || 0),
-        0,
-      ) || 0
+      const totalCreditsConsumed =
+        creditData?.reduce((sum, row) => sum + (row.total_spent || 0), 0) || 0
 
       // Churn risk count
       const { count: churnRiskCount, error: churnError } = await db
@@ -282,7 +282,7 @@ export const analyticsRouter = router({
         page: z.number().int().min(0).default(0),
         limit: z.number().int().min(1).max(100).default(20),
         churnRiskOnly: z.boolean().optional(),
-      }),
+      })
     )
     .query(async ({ input, ctx }) => {
       const db = ctx.adminSupabase
@@ -293,7 +293,7 @@ export const analyticsRouter = router({
         .from('stores')
         .select(
           'id, shop_domain, billing_mode, subscription_tier, status, is_churn_risk, churn_flagged_at, created_at, store_credits(balance, total_spent, total_purchased)',
-          { count: 'exact' },
+          { count: 'exact' }
         )
         .order('created_at', { ascending: false })
         .range(offset, offset + input.limit - 1)
@@ -386,7 +386,7 @@ export const analyticsRouter = router({
         generationLimit: z.number().int().min(1).max(100).default(20),
         transactionPage: z.number().int().min(0).default(0),
         transactionLimit: z.number().int().min(1).max(100).default(20),
-      }),
+      })
     )
     .query(async ({ input, ctx }) => {
       const db = ctx.adminSupabase
@@ -426,9 +426,16 @@ export const analyticsRouter = router({
 
       // Generation history (paginated)
       const genOffset = input.generationPage * input.generationLimit
-      const { data: generations, error: genError, count: genTotal } = await db
+      const {
+        data: generations,
+        error: genError,
+        count: genTotal,
+      } = await db
         .from('store_generation_sessions')
-        .select('id, status, credits_used, processing_time_ms, error_message, request_id, created_at, completed_at', { count: 'exact' })
+        .select(
+          'id, status, credits_used, processing_time_ms, error_message, request_id, created_at, completed_at',
+          { count: 'exact' }
+        )
         .eq('store_id', input.storeId)
         .order('created_at', { ascending: false })
         .range(genOffset, genOffset + input.generationLimit - 1)
@@ -439,7 +446,11 @@ export const analyticsRouter = router({
 
       // Credit transaction history (paginated)
       const txOffset = input.transactionPage * input.transactionLimit
-      const { data: transactions, error: txError, count: txTotal } = await db
+      const {
+        data: transactions,
+        error: txError,
+        count: txTotal,
+      } = await db
         .from('store_credit_transactions')
         .select('id, amount, type, request_id, description, created_at', { count: 'exact' })
         .eq('store_id', input.storeId)
@@ -489,10 +500,12 @@ export const analyticsRouter = router({
    */
   getB2COverview: adminProcedure
     .input(
-      z.object({
-        startDate: iso8601DateString.optional(),
-        endDate: iso8601DateString.optional(),
-      }).optional(),
+      z
+        .object({
+          startDate: iso8601DateString.optional(),
+          endDate: iso8601DateString.optional(),
+        })
+        .optional()
     )
     .query(async ({ input, ctx }) => {
       const db = ctx.adminSupabase
@@ -541,9 +554,7 @@ export const analyticsRouter = router({
       const activeUsers = new Set(activeUserData?.map((s) => s.user_id)).size
 
       // Total B2C generations (with optional date filter)
-      let genQuery = db
-        .from('generation_sessions')
-        .select('*', { count: 'exact', head: true })
+      let genQuery = db.from('generation_sessions').select('*', { count: 'exact', head: true })
 
       if (input?.startDate) {
         genQuery = genQuery.gte('created_at', input.startDate)
@@ -567,10 +578,8 @@ export const analyticsRouter = router({
         throw new Error(creditsError.message)
       }
 
-      const totalCreditsConsumed = creditData?.reduce(
-        (sum, row) => sum + (row.total_spent || 0),
-        0,
-      ) || 0
+      const totalCreditsConsumed =
+        creditData?.reduce((sum, row) => sum + (row.total_spent || 0), 0) || 0
 
       // B2C credit purchases (count of purchase transactions)
       const { count: creditPurchases, error: purchaseError } = await db
@@ -599,10 +608,12 @@ export const analyticsRouter = router({
    */
   getRevenueOverview: adminProcedure
     .input(
-      z.object({
-        startDate: iso8601DateString.optional(),
-        endDate: iso8601DateString.optional(),
-      }).optional(),
+      z
+        .object({
+          startDate: iso8601DateString.optional(),
+          endDate: iso8601DateString.optional(),
+        })
+        .optional()
     )
     .query(async ({ input, ctx }) => {
       const db = ctx.adminSupabase
@@ -630,10 +641,7 @@ export const analyticsRouter = router({
       const b2bRevenue = b2bTx?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
 
       // B2C revenue: purchase transactions (future-proof — no purchase type yet)
-      let b2cTxQuery = db
-        .from('credit_transactions')
-        .select('amount')
-        .eq('type', 'purchase')
+      let b2cTxQuery = db.from('credit_transactions').select('amount').eq('type', 'purchase')
 
       if (input?.startDate) {
         b2cTxQuery = b2cTxQuery.gte('created_at', input.startDate)
@@ -668,9 +676,7 @@ export const analyticsRouter = router({
         throw new Error(b2bGenError.message)
       }
 
-      let b2cGenQuery = db
-        .from('generation_sessions')
-        .select('*', { count: 'exact', head: true })
+      let b2cGenQuery = db.from('generation_sessions').select('*', { count: 'exact', head: true })
 
       if (input?.startDate) {
         b2cGenQuery = b2cGenQuery.gte('created_at', input.startDate)
@@ -708,10 +714,12 @@ export const analyticsRouter = router({
    */
   getQualityMetrics: adminProcedure
     .input(
-      z.object({
-        startDate: iso8601DateString.optional(),
-        endDate: iso8601DateString.optional(),
-      }).optional(),
+      z
+        .object({
+          startDate: iso8601DateString.optional(),
+          endDate: iso8601DateString.optional(),
+        })
+        .optional()
     )
     .query(async ({ input, ctx }) => {
       const db = ctx.adminSupabase
@@ -735,9 +743,7 @@ export const analyticsRouter = router({
       }
 
       // B2C generation sessions
-      let b2cSessionQuery = db
-        .from('generation_sessions')
-        .select('status, processing_time_ms')
+      let b2cSessionQuery = db.from('generation_sessions').select('status, processing_time_ms')
 
       if (input?.startDate) {
         b2cSessionQuery = b2cSessionQuery.gte('created_at', input.startDate)
@@ -864,13 +870,15 @@ export const analyticsRouter = router({
             total: b2bList.length,
             completed: b2bCompleted,
             failed: b2bFailed,
-            successRate: b2bList.length > 0 ? Math.round((b2bCompleted / b2bList.length) * 10000) / 10000 : 0,
+            successRate:
+              b2bList.length > 0 ? Math.round((b2bCompleted / b2bList.length) * 10000) / 10000 : 0,
           },
           b2c: {
             total: b2cList.length,
             completed: b2cCompleted,
             failed: b2cFailed,
-            successRate: b2cList.length > 0 ? Math.round((b2cCompleted / b2cList.length) * 10000) / 10000 : 0,
+            successRate:
+              b2cList.length > 0 ? Math.round((b2cCompleted / b2cList.length) * 10000) / 10000 : 0,
           },
         },
       }

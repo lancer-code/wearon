@@ -7033,15 +7033,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/sharp@npm:^0.32.0":
-  version: 0.32.0
-  resolution: "@types/sharp@npm:0.32.0"
-  dependencies:
-    sharp: "npm:*"
-  checksum: 10/9d0ca925ebb18e870740db0e0abcaaa2458645673068166b9f26e042640fa430644fe39aada320e03834f7ba3600e678de822201ffc312f9df1f515ba107ebd5
-  languageName: node
-  linkType: hard
-
 "@types/stack-utils@npm:^2.0.0":
   version: 2.0.3
   resolution: "@types/stack-utils@npm:2.0.3"
@@ -7863,14 +7854,10 @@ __metadata:
     "@supabase/supabase-js": "npm:^2.48.1"
     "@trpc/server": "npm:^11.0.0"
     "@types/node": "npm:^25.0.3"
-    "@types/sharp": "npm:^0.32.0"
     axios: "npm:^1.13.2"
-    dotenv: "npm:^17.2.3"
-    form-data: "npm:^4.0.5"
     ioredis: "npm:^5.9.0"
     pino: "npm:^9.6.0"
     pino-pretty: "npm:^13.0.0"
-    sharp: "npm:^0.34.5"
     superjson: "npm:^2.2.2"
     ts-node: "npm:^10.9.2"
     tsx: "npm:^4.21.0"
@@ -9741,13 +9728,6 @@ __metadata:
   version: 16.6.1
   resolution: "dotenv@npm:16.6.1"
   checksum: 10/1d1897144344447ffe62aa1a6d664f4cd2e0784e0aff787eeeec1940ded32f8e4b5b506d665134fc87157baa086fce07ec6383970a2b6d2e7985beaed6a4cc14
-  languageName: node
-  linkType: hard
-
-"dotenv@npm:^17.2.3":
-  version: 17.2.4
-  resolution: "dotenv@npm:17.2.4"
-  checksum: 10/3b0fdfb40aebfec3a3b4421990b5874cb93c5a259d20ef637ead237a360cbaf753879d3a66e5c044147658824d86ffead6a4090e8ebb727782e5717fcdb636dd
   languageName: node
   linkType: hard
 
@@ -16729,7 +16709,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"sharp@npm:*, sharp@npm:^0.34.4, sharp@npm:^0.34.5":
+"sharp@npm:^0.34.4":
   version: 0.34.5
   resolution: "sharp@npm:0.34.5"
   dependencies:

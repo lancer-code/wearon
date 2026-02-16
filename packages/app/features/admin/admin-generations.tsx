@@ -464,6 +464,7 @@ export function AdminGenerations() {
         accessories: accessoryDownloads.length > 0
           ? accessoryDownloads.map((d, i) => ({ type: `accessory-${i}`, url: d.downloadUrl }))
           : undefined,
+        ageVerified: true,
       })
 
       // Set session ID to trigger Realtime subscription

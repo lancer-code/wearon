@@ -162,7 +162,7 @@ export async function recoverStuckJobs(): Promise<StuckJobRecoveryResult> {
     const { data: stuckSessions, error: fetchError } = await getAdminClient()
       .from('generation_sessions')
       .select('id, user_id, status, created_at')
-      .in('status', ['processing', 'pending'])
+      .in('status', ['processing', 'pending', 'queued'])
       .lt('created_at', cutoffTime.toISOString())
 
     if (fetchError) {

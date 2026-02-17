@@ -110,14 +110,16 @@ export const generationRouter = router({
         .select('id')
         .single()
 
+
       if (sessionError || !sessionData) {
+        logger.error({ error: sessionError }, 'Failed to create generation session')
         // Refund credits on error
         await ctx.supabase.rpc('refund_credits', {
           p_user_id: userId,
           p_amount: 1,
           p_description: 'Generation session creation failed - refund',
         })
-        throw new Error('Failed to create generation session')
+        throw new Error(`Failed to create generation session: ${sessionError?.message || 'Unknown error'}`)
       }
 
       const sessionId = sessionData.id

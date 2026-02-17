@@ -86,8 +86,8 @@ export async function cleanupStore(storeId: string, requestId: string): Promise<
   result.jobsCancelled = cancelledJobs?.length ?? 0
   log.info({ storeId, count: result.jobsCancelled }, '[StoreCleanup] Queued jobs cancelled')
 
-  // Schedule storage cleanup: delete files from both uploads and generated buckets
-  const buckets = ['uploads', 'generated']
+  // Schedule storage cleanup: delete files from virtual-tryon-images bucket
+  const buckets = ['virtual-tryon-images']
 
   for (const bucket of buckets) {
     try {
